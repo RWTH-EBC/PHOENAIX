@@ -1,0 +1,1 @@
+from fiware_utils import json_schema2fiware
