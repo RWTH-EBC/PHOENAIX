@@ -43,8 +43,9 @@ for p_file, q_file in zip(data_files_P, data_files_Q):
 # time stamp contains mean of following 15 minutes
 df = df.resample("15min").mean()
 
+# save as csv
 path_result_file = "data\\01_input\\02_electric_loadprofiles_HTW"
-name_result_file = "el_loadprofiles_HTW_processed.csv"
-df.to_csv(f"{ROOT_DIR}\\{path_result_file}\\{name_result_file}")
+name_result_file = "el_loadprofiles_HTW_processed"
+df.to_csv(f"{ROOT_DIR}\\{path_result_file}\\{name_result_file}.csv")
 
-print("finish")
+print(f"File saved to {ROOT_DIR}\\{path_result_file}\\{name_result_file}.csv")
