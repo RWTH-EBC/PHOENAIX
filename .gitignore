@@ -1,6 +1,11 @@
 # Ignore the following files in GIT #
 ######################################
 
+# Rohdaten #
+#########################
+/00_Lokale_Rohdaten
+
+
 # Python compiled files #
 #########################
 *.pyc

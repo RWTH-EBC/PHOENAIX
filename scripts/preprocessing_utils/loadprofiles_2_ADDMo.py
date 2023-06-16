@@ -15,7 +15,7 @@ loadprofile_nr = 0
 df = df.iloc[:, [loadprofile_nr]]
 
 # convert to ADDMo format and save as excel
-df = df.add_suffix(" []")
+df = df.add_suffix(" [W]")
 df.index = pd.to_datetime(df.index)
 df.index = df.index.tz_localize(None)
 
