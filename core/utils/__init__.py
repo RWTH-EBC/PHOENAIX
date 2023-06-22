@@ -1,1 +1,3 @@
-from fiware_utils import json_schema2fiware
+from core.utils.fiware_utils import \
+    json_schema2context_attributes,\
+    json_schema2context_entity

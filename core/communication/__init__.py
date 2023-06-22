@@ -1,1 +1,1 @@
-from gateway import Gateway
+from core.communication.gateway import Gateway
