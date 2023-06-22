@@ -42,21 +42,23 @@ class WeatherStation(Device):
     def run(self):
         while True:
             time.sleep(2)
-            print("read from cloud:")
+            print("read from cloud")
             # ONLY FOR DEMONSTRATION
             # here it does not need to read the latest temperature from FIWARE
             self.temperature.pull()
+            print(f"Get last value of temperature: {self.temperature.value}")
 
             # do your calculation/analysis/etc.
             self.forecast()
 
             # send output data to FIWARE
             # self.write_attrs()
-            print("write to cloud:")
+            print("write to cloud")
             self.solarDirectRadiation.push()
             self.solarDiffuseRadiation.push()
             self.cloudCover.push()
             self.temperature.push()
+            print(f"Write next value of temperature: {self.temperature.value}")
 
     def forecast(self):
         """
@@ -68,7 +70,7 @@ class WeatherStation(Device):
             None
         """
         # ONLY FOR DEMONSTRATION:
-            # how to access the current attribute value
+        # how to access the current attribute value if you need any inputs
         temperature = self.temperature.value
 
         # lunch the algorithm
