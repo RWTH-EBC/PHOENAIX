@@ -88,6 +88,7 @@ if __name__ == '__main__':
         entity_id="WeatherStation:DEQ:MVP:001",
         entity_type="WeatherStation",
         data_model=data_model,
-        weather_data_path="D:\Git\deq_demonstrator\\data\\01_input\\01_weather\\DWD_Wetterdaten_Aachen_2018-2020.csv"
+        # TODO change it if not work
+        weather_data_path="../../data/01_input/01_weather/DWD_Wetterdaten_Aachen_2018-2020.csv"
     )
     weather_station.run()
