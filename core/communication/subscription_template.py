@@ -9,6 +9,7 @@ subscription_template = {
                     ]
                 },
                 "notification": {
+                    "onlyChangedAttrs": True,
                     "http": {
                         "url": "http://quantumleap:8668/v2/notify"
                     },
