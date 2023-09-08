@@ -20,7 +20,6 @@ class DummyModel:
         output_df += 100
         return output_df
 
-%##
 class BuildingEnergyForecast(Device):
     def __init__(self, building_id, *args, **kwargs):
         super().__init__(*args, **kwargs)
