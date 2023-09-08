@@ -80,9 +80,9 @@ if __name__ == '__main__':
 
     plt.figure(figsize=(20, 3))
 
-    y_past = train_data_df.loc["target"]
+    y_past = train_data_df.loc[:,"target"]
     y_pred = forecast
-    y_test = test_data_df.loc["target"][:48]
+    y_test = test_data_df.loc[:,"target"][:48]
 
     plt.plot(y_past[-200:], label="Past time series values")
     plt.plot(y_pred["mean"], label="Mean forecast")
