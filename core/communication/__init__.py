@@ -1,1 +1,2 @@
 from core.communication.gateway import Gateway
+from core.communication.subscription_template import subscription_template

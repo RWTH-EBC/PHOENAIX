@@ -1,6 +1,6 @@
 from filip.models.base import DataType, FiwareHeader
 from filip.models.ngsi_v2.context import NamedContextAttribute, ContextEntity
-from filip.utils.cleanup import clear_context_broker
+from filip.utils.cleanup import clear_context_broker, clear_quantumleap
 from core.settings import settings
 
 JSONSchemaMap = {
@@ -44,6 +44,7 @@ def clean_up():
     """
     Clean up all the entities/registrations/subscriptions for this scenario
     """
-    service = settings.SCENARIO_NAME
     clear_context_broker(url=settings.CB_URL,
-                         fiware_header=FiwareHeader(service=service, service_path="/"))
+                         fiware_header=settings.fiware_header)
+    clear_quantumleap(url=settings.QL_URL,
+                      fiware_header=settings.fiware_header)
