@@ -61,5 +61,5 @@ class Device(Gateway, ABC):
 
     def run_in_thread(self, *args):
         """Create a new client for the topic"""
-        t = threading.Thread(target=self.run, daemon=False, args=args)
+        t = threading.Thread(target=self.run, args=args)
         t.start()
