@@ -8,6 +8,11 @@ class Attribute:
         self.name = name
         self.value = initial_value
 
+    def pull_historical(self,
+                        n_points=20):
+
+        pass
+
     def pull(self):
         """
         Pull data from fiware
