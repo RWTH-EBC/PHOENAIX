@@ -56,3 +56,4 @@ dist
 #ignore docs#
 #####################
 doc/_build
+/.env
