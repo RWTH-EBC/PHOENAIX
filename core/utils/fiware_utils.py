@@ -1,5 +1,7 @@
-from filip.models.base import DataType
+from filip.models.base import DataType, FiwareHeader
 from filip.models.ngsi_v2.context import NamedContextAttribute, ContextEntity
+from filip.utils.cleanup import clear_context_broker
+from core.settings import settings
 
 JSONSchemaMap = {
     "string": DataType.TEXT.value,
@@ -36,3 +38,12 @@ def json_schema2context_entity(json_schema_dict: dict,
     entity.add_attributes(attrs)
 
     return entity
+
+
+def clean_up():
+    """
+    Clean up all the entities/registrations/subscriptions for this scenario
+    """
+    service = settings.SCENARIO_NAME
+    clear_context_broker(url=settings.CB_URL,
+                         fiware_header=FiwareHeader(service=service, service_path="/"))
