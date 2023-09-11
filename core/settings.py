@@ -1,5 +1,6 @@
-from pydantic import BaseModel, Field, BaseSettings, AnyUrl
+from pydantic import Field, BaseSettings, AnyUrl
 from dotenv import find_dotenv
+from filip.models.base import FiwareHeader
 
 
 class Settings(BaseSettings):
@@ -18,6 +19,11 @@ class Settings(BaseSettings):
     # Test scenario settings
     # TODO what else setting should be define here?
     SCENARIO_NAME: str = Field(env="SCENARIO_NAME")
+
+    @property
+    def fiware_header(self):
+        return FiwareHeader(service=self.SCENARIO_NAME.strip().lower(),
+                            service_path="/")
 
     class Config:
         case_sensitive = False

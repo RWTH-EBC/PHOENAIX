@@ -1,11 +1,12 @@
 import abc
 import threading
-from core.communication import Gateway
+from core.communication import Gateway, subscription_template
 from core.utils import \
     json_schema2context_attributes, \
     json_schema2context_entity
 from abc import ABC
 from requests.exceptions import HTTPError
+from filip.models.ngsi_v2.subscriptions import Subscription
 
 
 class Device(Gateway, ABC):
@@ -13,7 +14,19 @@ class Device(Gateway, ABC):
                  entity_id: str = None, entity_type: str = None,
                  # attrs_read: dict = None, attrs_write: dict = None,
                  data_model: dict = None,
+                 save_history: bool = False,
                  *args, **kwargs):
+        """
+        Abstract device that interchange data with orion context broker.
+
+        Args:
+            entity_id: id of context entity
+            entity_type: type of context entity
+            data_model: dictionary of the json-schema
+            save_history: flag to save the history data. default: False
+            *args:
+            **kwargs:
+        """
         super().__init__(*args, **kwargs)
         self.health_check()
 
@@ -37,6 +50,13 @@ class Device(Gateway, ABC):
                                                     entity_type=self.entity_type)
                 self.cb_client.post_entity(entity)
 
+        if save_history:
+            subscription = subscription_template.copy()
+            subscription["subject"]["entities"][0]["id"] = self.entity_id
+            subscription["subject"]["entities"][0]["type"] = self.entity_type
+            self.cb_client.post_subscription(subscription=Subscription(**subscription))
+
+
     # def read_attrs(self):
     #     for attr_name in self.attrs_read:
     #         self.attrs_read[attr_name].value = self.cb_client.get_attribute_value(entity_id=self.entity_id,
@@ -59,7 +79,7 @@ class Device(Gateway, ABC):
         """
         return
 
-    def run_in_thread(self, *args):
+    def run_in_thread(self, *args, **kwargs):
         """Create a new client for the topic"""
-        t = threading.Thread(target=self.run, args=args)
+        t = threading.Thread(target=self.run, args=args, **kwargs)
         t.start()
