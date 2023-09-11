@@ -4,6 +4,7 @@ from core.data_models import Device
 import pandas as pd
 import time
 from core.data_models import Attribute
+from filip.models.ngsi_v2.timeseries import TimeSeries
 
 
 class WeatherStation(Device):

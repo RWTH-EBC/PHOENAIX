@@ -8,7 +8,10 @@ class ForecastBaseModel(ABC):
         pass
 
     @abstractmethod
-    def train_model(self, training_data:pd.DataFrame, prediction_horizon:int):
+    def train_model(self,
+                    training_data: pd.DataFrame,
+                    target_variable: str,
+                    prediction_horizon:int):
         """
 
         Args:
@@ -17,6 +20,7 @@ class ForecastBaseModel(ABC):
                 "timestamp" column containing utc timestamp without tz_info
                 "target" column contains target values
                 index unused
+            target_variable(str): Name of target variable in the df
             prediction_horizon (int): number of time steps to be predicted per prediction
 
         Returns:
