@@ -20,7 +20,7 @@ class MPC(Device):
             "n_hours": 36,  # ----,      number of hours of prediction horizon for rolling horizon
             "n_hours_ov": 35,  # ----,      number of hours of overlap horizon for rolling horizon
             "n_opt_max": 8760,  # 8760  # -----,       maximum number of optimizations
-            "month": 1,  # -----,     optimize this month 1-12 (1: Jan, 2: Feb, ...), set to 0 to optimize entire year
+            "month": 0,  # -----,     optimize this month 1-12 (1: Jan, 2: Feb, ...), set to 0 to optimize entire year
             # Parameters for rolling horizon with aggregated foresight
             "n_blocks": 2,
             # ----, number of blocks with different resolution: minimum 2 (control horizon and overlap horizon)
@@ -151,7 +151,8 @@ class MPC(Device):
                 param_rh["org_time_steps"][i].append(param_rh["org_time_steps"][i][-1] + param_rh["duration"][i][t])
 
         # adjust the following values
-        param_rh["datapoints"] = int(8760 / options["discretization_input_data"])
+        # param_rh["datapoints"] = int(8760 / options["discretization_input_data"])
+        param_rh["datapoints"] = 8760
 
     def mpc_params(self):
 

@@ -14,6 +14,7 @@ class Building(Device):
     def map_devices_opti(self):
 
         devs = {}
+        # number of buildings
         for n in range(options["nb_bes"]):
             devs[n] = {}
             # BOILER
@@ -29,6 +30,7 @@ class Building(Device):
 
         # load building parameter
         # TODO: add csv file with building parameter
+        # Joel sends csv
         building_params = pd.read_csv(options["path_input"] + "building_params" + ".csv", delimiter=";")
 
         # Wärmererzeuger und Wärmespeicher
@@ -77,8 +79,10 @@ class Building(Device):
                                                            param_rh, init_val, n_opt)
                 # TODO: into run_central_optimization
                 # TODO: run fmu
+                # init val gets storage load of buildings
                 init_val[n_opt + 1] = init_val_central_operation(opti_res[n_opt], nodes, par_rh, n_opt)
             print("Finished optimization " + str(n_opt) + ". " + str((n_opt + 1) / par_rh["n_opt"] * 100) + "% of optimizations processed.")
+        # opti res returns hp power for buildings with heat pump
         return opti_res
 
 
