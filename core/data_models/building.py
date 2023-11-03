@@ -10,7 +10,7 @@ from core.data_models import Device
 from core.machine_learning.autogluon import AutoGluonForecaster
 import threading
 from config.logger import setup_logger
-
+import numpy as np
 
 
 class Building(Device):
@@ -21,6 +21,12 @@ class Building(Device):
         self.electricityConsumption = Attribute(
             device=self,
             name="electricityConsumption",
+            initial_value=None
+        )
+
+        self.demandPrediction = Attribute(
+            device=self,
+            name='demandPrediction',
             initial_value=None
         )
 
@@ -41,6 +47,16 @@ class Building(Device):
             self.forecast()
             self.electricityConsumption.push(timestamp=self.timeStamp)
             self.current_timestep += 1
+
+            demand = np.random.uniform(0, 2, 12)
+            self.demandPrediction.value = list(demand)
+            self.demandPrediction.push(timestamp=self.timeStamp)
+            print('PUSHED')
+            self.demandPrediction.pull()
+            print(self.demandPrediction.value)
+            time.sleep(2)
+            continue
+
 
             # To speed up process until necessary training data is in crate DB
             if self.current_timestep < self.timesteps_month - 10:

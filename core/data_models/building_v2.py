@@ -37,12 +37,12 @@ class Building(Device):
         if building_params["heater"][n] == "boi":
             devs[n]["boi"]["cap"] = building_params["design_heat"][n]
             devs[n]["devs"]["EH"]["cap"] = building_params["design_dhw"][n]
-            devs[n]["devs"]["TES"]["cap"] = building_params["beta"] * building_params["mean_heat"][n]
+            devs[n]["devs"]["TES"]["cap"] = building_params['design_tes'][n]
 
         elif building_params["heater"][n] == "hp":
             devs[n]["devs"]["EH"]["cap"] = building_params["design_dhw"][n]
             devs[n]["devs"]["HP"]["cap"] = building_params["design_heat"][n]
-            devs[n]["devs"]["TES"]["cap"] = building_params["beta"] * building_params["mean_heat"][n]
+            devs[n]["devs"]["TES"]["cap"] =building_params['design_tes'][n]
 
 
     def fmu_import(self):
