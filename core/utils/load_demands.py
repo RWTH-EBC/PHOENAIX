@@ -3,8 +3,9 @@ from config.definitions import ROOT_DIR
 from pathlib import Path
 
 DEMANDS_PATH = Path(ROOT_DIR) / 'data' / '01_input' / '01_demands'
+PV_PATH = Path(ROOT_DIR) / 'data' / '01_input' / '04_pv_generation'
 
-def load_demands(year=2018):
+def load_demands_and_pv(year=2018):
     building_id_map = {
         0: 'SFH_1_0',
         1: 'SFH_1_1',
@@ -29,5 +30,16 @@ def load_demands(year=2018):
 
         df = pd.concat(dfs, axis=1)
         demands[demand] = df
+
+    dfs = []
+    for id, name in building_id_map.items():
+        file_name = f'decentralPV_{name}.csv'
+        _df = pd.read_csv(PV_PATH / file_name, header=None)
+        _df.index = time_index
+        _df.columns = [id]
+        dfs.append(_df)
+
+    df = pd.concat(dfs, axis=1)
+    demands['pv_power'] = df
 
     return demands

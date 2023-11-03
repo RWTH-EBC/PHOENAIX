@@ -1,4 +1,4 @@
-from core.utils.load_demands import load_demands
+from core.utils.load_demands import load_demands_and_pv
 from core.utils.create_rh_params import create_rh_params
 from config.definitions import ROOT_DIR
 from pathlib import Path
@@ -38,7 +38,7 @@ def load_buildings():
 
     return devs
 
-def run_central_optimization(demands, devs, weather, param_mpc, param_rh, init_val, n_opt):
+def run_central_optimization(demands_and_pv, devs, weather, param_mpc, param_rh, init_val, n_opt):
     # Define subsets
     heater = ("boi", "eh", "hp")
     storage = ("tes",)
@@ -281,7 +281,7 @@ def run_central_optimization(demands, devs, weather, param_mpc, param_rh, init_v
 
             # model.addConstr(cop[n][dev][t] == 0.4 * (273.15 + 35) / (35 - T_air[t]),
             #                 name="CoP_equation_" + dev + "_" + str(t))
-            model.addConstr(cop[n][dev][t] == 0.4 * (273.15 + 35) / (35 - 25),
+            model.addConstr(cop[n][dev][t] == 0.4 * (273.15 + 35) / (35 - 5),
                             name="CoP_equation_" + dev + "_" + str(t))
 
             # BOILER
@@ -291,11 +291,12 @@ def run_central_optimization(demands, devs, weather, param_mpc, param_rh, init_v
                 name="Power_equation_" + dev + "_" + str(t))
 
     # # Solar components
-    # for n in devs:
-    #     for dev in solar:
-    #         for t in time_steps:
-    #             model.addConstr(power[n][dev][t] == nodes[n]["pv_power"][t],
-    #                             name="Solar_electrical_" + dev + "_" + str(t))
+    for n in devs:
+        for dev in solar:
+            for t in time_steps:
+                print(demands_and_pv["pv_power"][n][t])
+                model.addConstr(power[n][dev][t] == demands_and_pv["pv_power"][n][t],
+                                name="Solar_electrical_" + dev + "_" + str(t))
 
     # power of the electric heater
     for n in devs:
@@ -304,7 +305,7 @@ def run_central_optimization(demands, devs, weather, param_mpc, param_rh, init_v
             if devs[n]["eh"]["cap"] == 0.0:
                 model.addConstr(power[n]["eh"][t] == 0, name="El_heater_act_" + str(t))
             else:
-                model.addConstr(power[n]["eh"][t] == 0.5 * demands["dhw"][n][t],
+                model.addConstr(power[n]["eh"][t] == 0.5 * demands_and_pv["dhw"][n][t],
                                 name="El_heater_act_" + str(t))
 
     # %% BUILDING STORAGES # %% DOMESTIC FLEXIBILITIES
@@ -332,11 +333,11 @@ def run_central_optimization(demands, devs, weather, param_mpc, param_rh, init_v
             # Maximal discharging
             if devs[n]["eh"]["cap"] == 0.0:
                 model.addConstr(p_dch[n][dev][t] == (1 / eta_dch) * (
-                        demands["heating"][n][t] + demands["dhw"][n][t]),
+                        demands_and_pv["heating"][n][t] + demands_and_pv["dhw"][n][t]),
                                 name="Heat_discharging_" + str(t))
             else:
                 model.addConstr(p_dch[n][dev][t] == (1 / eta_dch) * (
-                        demands["heating"][n][t] + 0.5 * demands["dhw"][n][t]),
+                        demands_and_pv["heating"][n][t] + 0.5 * demands_and_pv["dhw"][n][t]),
                                 name="Heat_discharging_" + str(t))
 
             # Minimal and maximal soc
@@ -357,7 +358,7 @@ def run_central_optimization(demands, devs, weather, param_mpc, param_rh, init_v
     # Electricity balance (house)
     for n in devs:
         for t in time_steps:
-            model.addConstr(demands["elec"][n][t]
+            model.addConstr(demands_and_pv["elec"][n][t]
                             + power[n]["hp"][t] + power[n]["eh"][t]
                             - p_use[n]["pv"][t]
                             == p_imp[n][t],
@@ -366,7 +367,6 @@ def run_central_optimization(demands, devs, weather, param_mpc, param_rh, init_v
     # Split CHP and PV generation into self-consumed and sold powers
     for n in devs:
         for dev in ("pv",):
-
             for t in time_steps:
                 model.addConstr(p_sell[n][dev][t] + p_use[n][dev][t] == power[n][dev][t],
                                 name="power=sell+use_" + dev + "_" + str(t))
@@ -404,6 +404,7 @@ def run_central_optimization(demands, devs, weather, param_mpc, param_rh, init_v
         f.write('\nThe following constraint(s) cannot be satisfied:\n')
         for c in model.getConstrs():
             if c.IISConstr:
+                print(c.constrName)
                 f.write('%s' % c.constrName)
                 f.write('\n')
                 IISconstr.append(c.constrName)
@@ -483,7 +484,9 @@ def run_central_optimization(demands, devs, weather, param_mpc, param_rh, init_v
             res_p_to_grid, res_p_from_grid,
             res_gas_from_grid, res_p_feed_pv, res_p_demand)
 
-demands = load_demands()
+demands_and_pv = load_demands_and_pv()
+for key, val in demands_and_pv.items():
+    val.reset_index(inplace=True)
 buildings = load_buildings()
 param_rh = create_rh_params()
 
@@ -504,7 +507,7 @@ param_mpc["gp"]["mip_gap"] = 0.01  # https://www.gurobi.com/documentation/9.1/re
 param_mpc["gp"]["time_limit"] = 100  # [s]  https://www.gurobi.com/documentation/9.1/refman/timelimit.html
 param_mpc["gp"]["numeric_focus"] = 3  # https://www.gurobi.com/documentation/9.1/refman/numericfocus.html
 
-res = run_central_optimization(demands=demands,
+res = run_central_optimization(demands_and_pv=demands_and_pv,
                                devs=buildings,
                                weather=None,
                                param_mpc=param_mpc,
