@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     SCENARIO_NAME: str = Field(env="SCENARIO_NAME")
     N_HORIZON: int = Field(env='N_HORIZON')
     TIMESTEP: int = Field(env='TIMESTEP')
+    NORM_POWER: int = Field(env='NORM_POWER')
 
     @property
     def fiware_header(self):

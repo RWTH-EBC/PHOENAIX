@@ -14,6 +14,7 @@ from core.data_models import Device
 from core.utils.load_demands import load_demands_and_pv
 from core.settings import settings
 from core.utils.setup_logger import setup_logger
+from requests.exceptions import HTTPError
 
 
 
@@ -102,7 +103,7 @@ class BuildingEnergyForecast(Device):
                 attr = self.attribute_name_dict[attr_name]
                 attr.value = attr_values
                 attr.push()
-                        
+
             self.logger.info('Push successfull')
             ix += 1
             if ix > self.max_n:
@@ -111,37 +112,6 @@ class BuildingEnergyForecast(Device):
             _time = time.perf_counter() - _start
             time.sleep(2-_time)
 
-    # def _create_dummy_df(self,
-    #                      value):
-    #     data = [value] * 168
-    #     df = pd.DataFrame(data, columns=["0"])
-    #     return df
-
-    # def get_current_building_data(self):
-    #     previous_electricity_demand = self.cb_client.get_attribute_value(
-    #         entity_id=self.building_id,
-    #         entity_type='Building',
-    #         attr_name='electricityConsumption'
-    #     )
-
-    #     df = self._create_dummy_df(previous_electricity_demand)
-    #     return df
-
-    # def forecast(self):
-    #     """
-    #     This function represent the algorithm that should be done in each time step
-
-    #     Args:
-
-    #     Returns:
-    #         None
-    #     """
-
-    #     input_df = self.get_current_building_data()
-
-    #     output_df = self.ml_model.forecast(input_df)
-    #     forecast_values = output_df.to_numpy().flatten()
-    #     self.electricityDemand.value = list(forecast_values)
 
 
 if __name__ == '__main__':

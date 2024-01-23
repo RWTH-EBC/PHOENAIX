@@ -10,7 +10,12 @@ from pprint import pprint
 import pandas as pd
 from config.definitions import ROOT_DIR
 from core.settings import settings
-from core.data_models import Device
+from core.data_models import Device, Attribute
+from core.utils.setup_logger import setup_logger
+from core.utils.fiware_utils import clean_up
+from requests.exceptions import HTTPError
+import traceback
+import time
 
 
 class MPC(Device):
@@ -28,6 +33,21 @@ class MPC(Device):
             'dhwDemand': 'dhw',
             'pvPower': 'pv_power',
         }
+        
+        self.logger = setup_logger(name=kwargs['entity_id'])
+        
+        self.attributes = {}
+        for name in ['relativePower1',
+                     'relativePower2',
+                     'relativePower3',
+                     'SOCpred1',
+                     'SOCpred2',
+                     'SOCpred3']:
+            self.attributes[name] = Attribute(
+                device=self,
+                name=name,
+                initial_value=None
+            )
 
     @staticmethod
     def load_buildings():
@@ -104,20 +124,66 @@ class MPC(Device):
 
         return input_dict
 
+    def get_soc_init(self):
+        try:
+            ent = self.cb_client.get_entity_attributes(entity_id='ModelicaAgent:DEQ:MVP:000',
+                                                       response_format='keyValues')
+            soc_init = {'soc': {
+                0: {'tes': 0},
+                1: {'tes': ent['SOC1']},
+                2: {'tes': ent['SOC2']},
+                3: {'tes': ent['SOC3']},
+                4: {'tes': 0},
+            }}
+            self.logger.info('Got SOC init from fiware')
+            return soc_init
+        except HTTPError:
+            self.logger.warning('Couldnt get SOC_init, using default')
+            return None
+            
     def run(self):
-        input_dict = self.get_input_dict_from_fiware()
-        pprint(input_dict)
-        soc_init = None
-        res = self.run_central_optimization(
-            demands_and_pv=input_dict,
-            n_horizon=self.n_horizon,
-            param_mpc=self.mpc_params,
-            init_val=soc_init,
-            buildings=self.buildings,
-            silence=True
-        )
+        while True:
+            _start = time.perf_counter()
+            try:
+                input_dict = self.get_input_dict_from_fiware()
+                self.logger.info('Got input successfully')
+            except HTTPError as e:
+                error_message = str(e)
+                stack_trace = traceback.format_exc()
+                self.logger.error(f"OperationalError occurred: {error_message}\nStack Trace:\n{stack_trace}")
+                time.sleep(2 - (time.perf_counter() - _start))
+                continue
+            
+            soc_init = self.get_soc_init()
+                
+            res = self.run_central_optimization(
+                demands_and_pv=input_dict,
+                n_horizon=self.n_horizon,
+                param_mpc=self.mpc_params,
+                init_val=soc_init,
+                buildings=self.buildings,
+                silence=True
+            )
 
-        pprint(res[0])
+            res_power = res[1]
+            res_soc = res[3]
+            
+            self.attributes['relativePower1'].value = res_power[1]['hp'][0] / settings.NORM_POWER
+            self.attributes['relativePower2'].value = res_power[2]['hp'][0] / settings.NORM_POWER
+            self.attributes['relativePower3'].value = res_power[3]['hp'][0] / settings.NORM_POWER
+            self.attributes['SOCpred1'].value = res_soc[1]['tes'][0]
+            self.attributes['SOCpred2'].value = res_soc[2]['tes'][0]
+            self.attributes['SOCpred3'].value = res_soc[3]['tes'][0]
+            
+            for attr in self.attributes.values():
+                attr.push()
+                
+            self.logger.info('Pushed all attributes')
+
+            _time = time.perf_counter() - _start
+            time.sleep(2-_time)
+            
+            
 
     def run_central_optimization(self,
                                  demands_and_pv,
@@ -245,7 +311,6 @@ class MPC(Device):
             soc_nom[n] = {}
             for dev in storage:
                 soc_nom[n][dev] = buildings[n][dev]["cap"]
-
         # Storage initial SOC's
         soc_init = {}
         for n in buildings:
@@ -629,6 +694,7 @@ class MPC(Device):
 
 
 if __name__ == '__main__':
+    #clean_up()
     schema_path = Path(__file__).parents[1] / 'data_models' /\
         'schema' / 'MPC.json'
     with open(schema_path) as f:
@@ -636,6 +702,7 @@ if __name__ == '__main__':
     mpc = MPC(
         entity_id='MPC:DEQ:MVP:000',
         entity_type='MPC',
-        data_model=data_model
+        data_model=data_model,
+        save_history=True        
     )
     mpc.run()
