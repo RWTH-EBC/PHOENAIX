@@ -18,28 +18,30 @@ def load_demands_and_pv(year=2018):
 
     # Create the time index with 15-minute intervals
     time_index = pd.date_range(start=start_date, end=end_date, freq='15T')
-    demands = {}
+    demands = []
     for demand in ['cooling', 'dhw', 'elec', 'heating']:
         dfs = []
-        for id, name in building_id_map.items():
+        for _id, name in building_id_map.items():
             file_name = f'{demand}_{name}.csv'
             _df = pd.read_csv(DEMANDS_PATH / file_name, header=None)
             _df.index = time_index
-            _df.columns = [id]
+            _df.columns = pd.MultiIndex.from_tuples([(demand, _id)])
             dfs.append(_df)
 
         df = pd.concat(dfs, axis=1)
-        demands[demand] = df
+        demands.append(df)
+    
+    demands = pd.concat(demands, axis=1)
 
     dfs = []
-    for id, name in building_id_map.items():
+    for _id, name in building_id_map.items():
         file_name = f'decentralPV_{name}.csv'
         _df = pd.read_csv(PV_PATH / file_name, header=None)
         _df.index = time_index
-        _df.columns = [id]
+        _df.columns = pd.MultiIndex.from_tuples([('pv_power', _id)])
         dfs.append(_df)
 
     df = pd.concat(dfs, axis=1)
-    demands['pv_power'] = df
+    demands = pd.concat([demands, df], axis=1)
 
     return demands

@@ -1,0 +1,34 @@
+model_kwargs:
+  context_length: 96
+  prediction_length: 48
+  d_var: 32
+  d_hidden: 32
+  num_heads: 4
+  quantiles:
+  - 0.1
+  - 0.2
+  - 0.3
+  - 0.4
+  - 0.5
+  - 0.6
+  - 0.7
+  - 0.8
+  - 0.9
+  d_past_feat_dynamic_real:
+  - 73
+  c_past_feat_dynamic_cat: []
+  d_feat_dynamic_real:
+  - 1
+  - 1
+  - 1
+  - 1
+  - 1
+  c_feat_dynamic_cat: []
+  d_feat_static_real:
+  - 1
+  c_feat_static_cat:
+  - 1
+  dropout_rate: 0.1
+lr: 0.001
+patience: 10
+weight_decay: 1.0e-08
