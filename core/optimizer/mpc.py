@@ -565,11 +565,12 @@ class MPC(Device):
                                 name="Electricity_balance_" + str(t))
 
         # Split CHP and PV generation into self-consumed and sold powers
-        # for n in buildings:
-        #     for dev in ("pv",):
-        #         for t in time_steps:
-        #             model.addConstr(p_sell[n][dev][t] + p_use[n][dev][t] == power[n][dev][t],
-        #                             name="power=sell+use_" + dev + "_" + str(t))
+        # TODO: Following constrains commented to make model feasible
+        for n in buildings:
+            for dev in ("pv",):
+                for t in time_steps:
+                    model.addConstr(p_sell[n][dev][t] + p_use[n][dev][t] == power[n][dev][t],
+                                    name="power=sell+use_" + dev + "_" + str(t))
 
         # energy balance neighborhood
 
