@@ -423,13 +423,14 @@ class MPC(Device):
         model.addConstrs(
             network_load >= power["from_grid"][t] for t in time_steps)
 
+        m_cons = 50_000_000
         for n in buildings:
             for t in time_steps:
-                model.addConstr(y_imp[n][t] * 1000 >= p_imp[n]
+                model.addConstr(y_imp[n][t] * m_cons >= p_imp[n]
                                 [t], name="Max_el_imp_" + str(t))
                 # model.addConstr((1 - y_imp[n][t]) * 1000 >= p_sell[n]["pv"][t] + p_sell[n]["CHP"][t],
                 #                 name="Max_el_exp_" + str(t))
-                model.addConstr((1 - y_imp[n][t]) * 1000 >= p_sell[n]["pv"][t],
+                model.addConstr((1 - y_imp[n][t]) * m_cons >= p_sell[n]["pv"][t],
                                 name="Max_el_exp_" + str(t))
 
         # Define constraints

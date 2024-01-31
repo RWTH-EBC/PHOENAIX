@@ -14,10 +14,7 @@ from core.utils.load_demands import load_demands_and_pv
 from core.simulation.fmu_handler import FMUHandler
 from tqdm import tqdm
 import matplotlib.pyplot as plt
-from mpc import MPC
-
-
-
+from core.optimizer.mpc import MPC
 
 def main():
     demands_and_pv = load_demands_and_pv()
@@ -50,8 +47,15 @@ def main():
     
     buildings = MPC.load_buildings()
     
+    fmu_path = Path(__file__).parents[2] / 'data' / '01_input' / '05_fmu' / 'DEQ_MVP_FMU.fmu'
+
+    fmu = FMUHandler(fmu_path=fmu_path,
+                         step_size=STEPSIZE)
+    fmu.initialize()
     
     
+    add_ix = 0
+    n_inf = 0
     for n in tqdm(range(8000)):
         # For Loop test
 
@@ -62,24 +66,25 @@ def main():
                 input_dict[col1] = {}
 
             input_dict[col1][col2] = use_dem[(col1, col2)].to_numpy()
-        pprint(input_dict)
-
     
 
         original_stdout = sys.stdout
         try:
-            sys.stdout = open(os.devnull, 'w')
-            res = MPC._run_central_optimization(demands_and_pv=input_dict,
-                                                buildings=buildings,
-                                                n_horizon=N_HORIZON,
-                                                param_mpc=param_mpc,
-                                                init_val=soc_init)
+            with open(os.devnull, 'w') as f:
+                sys.stdout = f
+                res = MPC._run_central_optimization(demands_and_pv=input_dict,
+                                                    buildings=buildings,
+                                                    n_horizon=N_HORIZON,
+                                                    param_mpc=param_mpc,
+                                                    init_val=soc_init)
+        except:
+            res = None
+            n_inf += 1
+            
         finally:
             sys.stdout.close()
             sys.stdout = original_stdout
-
-
-        
+                    
         modelica_input_dict = {
             'thermalDemand0': input_dict['heating'][0][0],
             'thermalDemand1': input_dict['heating'][1][0],
@@ -96,7 +101,7 @@ def main():
             if res is None:
                 _rel_hp = results[-1][name]
             else:
-                _rel_hp = res[1][key]['hp'][0] / 5000
+                _rel_hp = res[1][key]['hp'][0+add_ix] / 5000
             modelica_input_dict[name] = _rel_hp
         
         fmu.do_step(modelica_input_dict)
@@ -126,37 +131,8 @@ def main():
     print(f'n_inf: {n_inf}')
     df = pd.DataFrame(data=results)
     
-    for name in ['haus_1.SOC',
-                 'haus_2.SOC',
-                 'haus_3.SOC']:
+    return df
         
-        plt.plot(df[name] / (3600), label=name)
-    
-    plt.ylabel('SOC in kWh')
-    plt.legend()
-    plt.show()
-    
-    for name in ['relativePower1',
-                 'relativePower2',
-                 'relativePower3']:
-    
-        plt.plot(df[name], label=name)
-            
-    plt.legend()
-    plt.show()
-    
-    for name in ['thermalDemand1',
-                 'thermalDemand2',
-                 'thermalDemand3']:
-    
-        plt.plot(df[name], label=name)
-    
-    plt.xlabel('Thermal Demand in W')
-    plt.legend()
-    plt.show()
-    
-    
-    
 
 if __name__ == '__main__':
     main()

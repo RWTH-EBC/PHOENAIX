@@ -24,6 +24,7 @@ def main():
     demands_and_pv = demands_and_pv[::4].copy()  # To make 15m interval hourly
     N_HORIZON = 10
     
+    
     soc_init = None
         
     param_mpc = {}
