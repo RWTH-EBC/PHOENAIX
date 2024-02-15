@@ -16,6 +16,7 @@ from core.utils.fiware_utils import clean_up
 from requests.exceptions import HTTPError
 import traceback
 import time
+import paho.mqtt.client as mqtt
 
 
 class MPC(Device):
@@ -25,6 +26,12 @@ class MPC(Device):
         self.n_horizon = settings.N_HORIZON
         self.buildings = self.load_buildings()
         self.mpc_params = self.load_mpc_params()
+        
+        self.mqtt_client = mqtt.Client()
+        self.mqtt_client.on_connect = self.on_connect
+        self.mqtt_client.on_message = self.on_message
+        self.mqtt_client.connect(host=settings.MQTT_HOST,
+                                 port=settings.MQTT_PORT)
 
         self.attr_translation = {
             'electricityDemand': 'elec',
@@ -34,6 +41,7 @@ class MPC(Device):
             'pvPower': 'pv_power',
         }
         
+        self.topic = '/mpc'
         self.logger = setup_logger(name=kwargs['entity_id'])
         
         self.attributes = {}
@@ -140,50 +148,61 @@ class MPC(Device):
         except HTTPError:
             self.logger.warning('Couldnt get SOC_init, using default')
             return None
-            
+        
+    def on_connect(self, client, userdata, flags, rc):
+        print(f"Connected {self.__class__.__name__} with result code "+str(rc))
+        # Subscribe to the /predict topic
+        client.subscribe(self.topic)
+        
+    def on_message(self, client, userdata, msg):
+        if msg.topic != self.topic:
+            return
+        for building_ix in range(5):
+            topic=f'/predict{building_ix}'
+            self.mqtt_client.publish(topic=topic)
+        time.sleep(0.1)
+        self.predict()
+        
     def run(self):
-        while True:
-            _start = time.perf_counter()
-            try:
-                input_dict = self.get_input_dict_from_fiware()
-                self.logger.info('Got input successfully')
-            except HTTPError as e:
-                error_message = str(e)
-                stack_trace = traceback.format_exc()
-                self.logger.error(f"OperationalError occurred: {error_message}\nStack Trace:\n{stack_trace}")
-                time.sleep(2 - (time.perf_counter() - _start))
-                continue
+        self.mqtt_client.loop_forever()
             
-            soc_init = self.get_soc_init()
-                
-            res = self.run_central_optimization(
-                demands_and_pv=input_dict,
-                n_horizon=self.n_horizon,
-                param_mpc=self.mpc_params,
-                init_val=soc_init,
-                buildings=self.buildings,
-                silence=True
-            )
+    def predict(self):
+        try:
+            input_dict = self.get_input_dict_from_fiware()
+            self.logger.info('Got input successfully')
+        except HTTPError as e:
+            error_message = str(e)
+            stack_trace = traceback.format_exc()
+            self.logger.error(f"OperationalError occurred: {error_message}\nStack Trace:\n{stack_trace}")
+            return
+        
+        soc_init = self.get_soc_init()
+            
+        res = self.run_central_optimization(
+            demands_and_pv=input_dict,
+            n_horizon=self.n_horizon,
+            param_mpc=self.mpc_params,
+            init_val=soc_init,
+            buildings=self.buildings,
+            silence=True
+        )
 
-            res_power = res[1]
-            res_soc = res[3]
+        res_power = res[1]
+        res_soc = res[3]
+        
+        self.attributes['relativePower1'].value = res_power[1]['hp'][0] / settings.NORM_POWER
+        self.attributes['relativePower2'].value = res_power[2]['hp'][0] / settings.NORM_POWER
+        self.attributes['relativePower3'].value = res_power[3]['hp'][0] / settings.NORM_POWER
+        self.attributes['SOCpred1'].value = res_soc[1]['tes'][0]
+        self.attributes['SOCpred2'].value = res_soc[2]['tes'][0]
+        self.attributes['SOCpred3'].value = res_soc[3]['tes'][0]
+        
+        for attr in self.attributes.values():
+            attr.push()
             
-            self.attributes['relativePower1'].value = res_power[1]['hp'][0] / settings.NORM_POWER
-            self.attributes['relativePower2'].value = res_power[2]['hp'][0] / settings.NORM_POWER
-            self.attributes['relativePower3'].value = res_power[3]['hp'][0] / settings.NORM_POWER
-            self.attributes['SOCpred1'].value = res_soc[1]['tes'][0]
-            self.attributes['SOCpred2'].value = res_soc[2]['tes'][0]
-            self.attributes['SOCpred3'].value = res_soc[3]['tes'][0]
-            
-            for attr in self.attributes.values():
-                attr.push()
-                
-            self.logger.info('Pushed all attributes')
-
-            _time = time.perf_counter() - _start
-            time.sleep(2-_time)
-            
-            
+        self.logger.info('Pushed all attributes')
+        
+        self.mqtt_client.publish('/fmu')
 
     def run_central_optimization(self,
                                  demands_and_pv,

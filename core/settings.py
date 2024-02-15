@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     N_HORIZON: int = Field(env='N_HORIZON')
     TIMESTEP: int = Field(env='TIMESTEP')
     NORM_POWER: int = Field(env='NORM_POWER')
+    CYCLE_TIME: int = Field(env='CYCLE_TIME')
 
     @property
     def fiware_header(self):

@@ -17,6 +17,8 @@ from requests.exceptions import HTTPError
 import traceback
 import time
 from .fmu_handler import FMUHandler
+import paho.mqtt.client as mqtt
+from core.utils.load_demands import load_demands_and_pv
 
 
 class ModelicaAgent(Device):
@@ -28,6 +30,17 @@ class ModelicaAgent(Device):
         self.fmu = FMUHandler(fmu_path=fmu_path,
                          step_size=settings.TIMESTEP)
         self.fmu.initialize()
+        
+        self.mqtt_client = mqtt.Client()
+        self.mqtt_client.on_connect = self.on_connect
+        self.mqtt_client.on_message = self.on_message
+        self.mqtt_client.connect(host=settings.MQTT_HOST,
+                                 port=settings.MQTT_PORT)
+        self.topic = '/fmu'
+        
+        self.actual_data = load_demands_and_pv().iloc[::4].copy()
+        self.max_n = self.actual_data.shape[0]
+        self.n = 0
 
         self.attr_translation = {
             'haus_1.SOC': 'SOC1',
@@ -52,14 +65,13 @@ class ModelicaAgent(Device):
                 initial_value=None
             )
             
+        self.current_time = time.perf_counter()
+            
     def get_input_dict_from_fiware(self):
         input_dict = {}
         for building_ix in range(5):
-            entity_id = f'BuildingEnergyForecast:DEQ:MVP:{"{:03}".format(building_ix)}'
-            attrs = self.cb_client.get_entity_attributes(entity_id=entity_id,
-                                                         response_format='keyValues')
-
-            input_dict[f'thermalDemand{building_ix}'] = attrs['heatingDemand'][0]
+            heat_demand = self.actual_data.iloc[self.n][('heating', building_ix)]
+            input_dict[f'thermalDemand{building_ix}'] = heat_demand
         
         mpc_id = 'MPC:DEQ:MVP:000'
         for name in ['relativePower1',
@@ -71,51 +83,64 @@ class ModelicaAgent(Device):
             input_dict[name] = attr_value
 
         return input_dict
-
-
-        try:
-            raise HTTPError
-            self.logger.info('Got SOC init from fiware')
-        except HTTPError:
-            self.logger.warning('Couldnt get SOC_init, using default')
-            return None
-            
+    
+    def on_connect(self, client, userdata, flags, rc):
+        print(f"Connected {self.__class__.__name__} with result code "+str(rc))
+        # Subscribe to the /predict topic
+        client.subscribe(self.topic)
+        
+    def on_message(self, client, userdata, msg):
+        if msg.topic != self.topic:
+            return
+        self.do_step()
+        
     def run(self):
-        while True:
-            _start = time.perf_counter()
-            try:
-                input_dict = self.get_input_dict_from_fiware()
-                self.logger.info('Got input successfully')
-            except HTTPError as e:
-                error_message = str(e)
-                stack_trace = traceback.format_exc()
-                self.logger.error(f"OperationalError occurred: {error_message}\nStack Trace:\n{stack_trace}")
-                time.sleep(2 - (time.perf_counter() - _start))
-                continue
+        self.mqtt_client.loop_forever()
+
             
-            self.fmu.do_step(input_dict)
+    def do_step(self):
+        try:
+            input_dict = self.get_input_dict_from_fiware()
+            self.logger.info('Got input successfully')
+        except HTTPError as e:
+            error_message = str(e)
+            stack_trace = traceback.format_exc()
+            self.logger.error(f"OperationalError occurred: {error_message}\nStack Trace:\n{stack_trace}")
+            time.sleep(settings.CYCLE_TIME - (time.perf_counter() - self.current_time))
+            self.current_time = time.perf_counter()
+            self.mqtt_client.publish('/mpc')
+            return
+
+        
+        self.fmu.do_step(input_dict)
+        
+        for modelica_variable in self.attr_translation:
+        
+            soc = self.fmu.get_value(modelica_variable) / 3600
+            attr = self.attributes[self.attr_translation[modelica_variable]]
+            attr.value = soc
+            attr.push()
             
-            for modelica_variable in self.attr_translation:
+        for name in ['thermalDemand0',
+                    'thermalDemand1',
+                    'thermalDemand2',
+                    'thermalDemand3',
+                    'thermalDemand4']:
+            attr = self.attributes[name]
+            attr.value = input_dict[name]
+            attr.push()
             
-                soc = self.fmu.get_value(modelica_variable) / 3600
-                attr = self.attributes[self.attr_translation[modelica_variable]]
-                attr.value = soc
-                attr.push()
-                
-            for name in ['thermalDemand0',
-                     'thermalDemand1',
-                     'thermalDemand2',
-                     'thermalDemand3',
-                     'thermalDemand4']:
-                attr = self.attributes[name]
-                attr.value = input_dict[name]
-                attr.push()
-                
-            self.logger.info('Push of attributes succesful')
-            self.fmu.current_time += settings.TIMESTEP
-            
-            _time = time.perf_counter() - _start
-            time.sleep(2-_time)
+        self.logger.info('Push of attributes succesful')
+        self.fmu.current_time += settings.TIMESTEP
+        ct = time.perf_counter() 
+        sleep_time = (settings.CYCLE_TIME - (ct - self.current_time))
+        
+        if sleep_time < 0:
+            self.logger.warning(f'Negative sleep time {sleep_time} --> adjust cycle time')
+        else:
+            time.sleep(sleep_time)
+        self.current_time = ct
+        self.mqtt_client.publish('/mpc')
             
 
 if __name__ == '__main__':

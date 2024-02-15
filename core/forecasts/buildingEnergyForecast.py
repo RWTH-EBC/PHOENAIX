@@ -4,6 +4,7 @@ p = str(Path(__file__).parents[2])
 if p not in sys.path:
     sys.path.insert(0, p)
 
+import paho.mqtt.client as mqtt
 import time
 import json
 import pandas as pd
@@ -25,11 +26,18 @@ class BuildingEnergyForecast(Device):
                  **kwargs):
         super().__init__(*args, **kwargs)
         
+        self.mqtt_client = mqtt.Client()
+        self.mqtt_client.on_connect = self.on_connect
+        self.mqtt_client.on_message = self.on_message
+        self.mqtt_client.connect(host=settings.MQTT_HOST,
+                                 port=settings.MQTT_PORT)
+        
         
         self.n_horizon = settings.N_HORIZON
         self.timestep = settings.TIMESTEP
         
         self.building_ix = building_ix
+        self.topic = f"/predict{self.building_ix}"
 
         self.attribute_df_dict = {
             'electricityDemand': ('elec', building_ix),
@@ -40,6 +48,8 @@ class BuildingEnergyForecast(Device):
         }
         
         self.logger = setup_logger(name=kwargs['entity_id'])
+        
+        self.ix = 0
                 
 
         # TODO 3600 is at the moment hardcoded as .iloc[::4]
@@ -90,32 +100,39 @@ class BuildingEnergyForecast(Device):
 
         assert self.attribute_df_dict.keys() == self.attribute_name_dict.keys()
         
+    
+    def on_connect(self, client, userdata, flags, rc):
+        print("Connected with result code "+str(rc))
+        # Subscribe to the /predict topic
+        client.subscribe(self.topic)
         
+    def on_message(self, client, userdata, msg):
+        if msg.topic != self.topic:
+            return
+        
+        self.predict()
+            
+        
+    def predict(self):
+        data_this_step = self.load_demands_and_pv.iloc[self.ix: self.ix+self.n_horizon]
+        
+        for attr_name, column in self.attribute_df_dict.items():
+            attr_values = data_this_step[column].to_list()
+            attr = self.attribute_name_dict[attr_name]
+            attr.value = attr_values
+            attr.push()
+
+        self.logger.info('Push successfull')
+        self.ix += 1
+        if self.ix > self.max_n:
+            self.ix = 0
+
     def run(self):
-        ix = 0
-        while True:
-            _start = time.perf_counter()
-            
-            data_this_step = self.load_demands_and_pv.iloc[ix: ix+self.n_horizon]
-            
-            for attr_name, column in self.attribute_df_dict.items():
-                attr_values = data_this_step[column].to_list()
-                attr = self.attribute_name_dict[attr_name]
-                attr.value = attr_values
-                attr.push()
-
-            self.logger.info('Push successfull')
-            ix += 1
-            if ix > self.max_n:
-                ix = 0
-
-            _time = time.perf_counter() - _start
-            time.sleep(2-_time)
-
-
-
+        self.mqtt_client.loop_forever()
+        
+        
 if __name__ == '__main__':
-    clean_up()
+    #clean_up()
     schema_path = Path(__file__).parents[1] / 'data_models' /\
         'schema' / 'BuildingEnergyForecast.json'
     with open(schema_path) as f:
@@ -127,4 +144,5 @@ if __name__ == '__main__':
         building_ix=0,
         data_model=data_model,
     )
+    
     building_energy_forecast.run_in_thread()

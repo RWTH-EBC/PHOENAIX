@@ -24,9 +24,9 @@ def main():
             building_ix=building_ix,
             data_model=copy.deepcopy(data_model)  # necessary because id gets popped from data_model. TODO change that in json schema to fiware converter
         )
-        building_energy_forecast.logger.setLevel(logging.WARNING)
+        building_energy_forecast.logger.setLevel(logging.INFO)
         building_energy_forecast.run_in_thread()
-        
+    
     schema_path = Path(__file__).parents[0] / 'core' / 'data_models' /\
         'schema' / 'MPC.json'
     with open(schema_path) as f:
