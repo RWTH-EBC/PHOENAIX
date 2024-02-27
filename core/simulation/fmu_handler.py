@@ -1,6 +1,6 @@
 import copy
 import shutil
-
+from typing import Union
 import fmpy
 import fmpy.fmi2
 
@@ -64,7 +64,9 @@ class FMUHandler:
             self.set_values(self.init_values)
             print('Values set')
 
-    def find_vars(self, find_str: (str, list), exclude_str: (str, list) = None):
+    def find_vars(self, 
+                  find_str: Union[str, list], 
+                  exclude_str: Union[str, list] = None):
         """
         Retruns all variables with given substring
         """

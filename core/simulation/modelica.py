@@ -7,6 +7,7 @@ import gurobipy as gp
 import os
 import json
 from pprint import pprint
+import numpy as np
 import pandas as pd
 from config.definitions import ROOT_DIR
 from core.settings import settings
@@ -22,20 +23,24 @@ from core.utils.load_demands import load_demands_and_pv
 
 
 class ModelicaAgent(Device):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, 
+                 offline_modus: bool = False,
+                 *args, 
+                 **kwargs):
         super().__init__(*args, **kwargs)
 
         fmu_path = Path(__file__).parents[2] / 'data' / '01_input' / '05_fmu' / 'DEQ_MVP_FMU.fmu'
-
+        self.offline_modus = offline_modus
         self.fmu = FMUHandler(fmu_path=fmu_path,
                          step_size=settings.TIMESTEP)
         self.fmu.initialize()
         
-        self.mqtt_client = mqtt.Client()
-        self.mqtt_client.on_connect = self.on_connect
-        self.mqtt_client.on_message = self.on_message
-        self.mqtt_client.connect(host=settings.MQTT_HOST,
-                                 port=settings.MQTT_PORT)
+        if not self.offline_modus: 
+            self.mqtt_client = mqtt.Client()
+            self.mqtt_client.on_connect = self.on_connect
+            self.mqtt_client.on_message = self.on_message
+            self.mqtt_client.connect(host=settings.MQTT_HOST,
+                                    port=settings.MQTT_PORT)
         self.topic = '/fmu'
         
         self.actual_data = load_demands_and_pv().iloc[::4].copy()
@@ -65,13 +70,24 @@ class ModelicaAgent(Device):
                 initial_value=None
             )
             
+            self.attributes[f'{name}_prev'] = Attribute(
+                device=self,
+                name=f'{name}_prev',
+                initial_value=[None, None, None],
+                is_array=True
+            )
+            
+        self.attributes['sinTime'] = Attribute(
+            device=self,
+            name='sinTime',
+            initial_value=[None, None, None],
+            is_array=True
+        )
+
         self.current_time = time.perf_counter()
             
     def get_input_dict_from_fiware(self):
         input_dict = {}
-        for building_ix in range(5):
-            heat_demand = self.actual_data.iloc[self.n][('heating', building_ix)]
-            input_dict[f'thermalDemand{building_ix}'] = heat_demand
         
         mpc_id = 'MPC:DEQ:MVP:000'
         for name in ['relativePower1',
@@ -81,7 +97,6 @@ class ModelicaAgent(Device):
                                                        attr_name=name)
             
             input_dict[name] = attr_value
-
         return input_dict
     
     def on_connect(self, client, userdata, flags, rc):
@@ -96,9 +111,14 @@ class ModelicaAgent(Device):
         
     def run(self):
         self.mqtt_client.loop_forever()
-
-            
-    def do_step(self):
+        
+    def _shift_values(self, values, value):
+        values[:-1] = values[1:]
+        values[-1] = value
+        
+        return values
+    
+    def _online_pre_do_step(self):
         try:
             input_dict = self.get_input_dict_from_fiware()
             self.logger.info('Got input successfully')
@@ -110,17 +130,34 @@ class ModelicaAgent(Device):
             self.current_time = time.perf_counter()
             self.mqtt_client.publish('/mpc')
             return
+        
+        return input_dict
 
         
+
+            
+    def do_step(self,
+                input_dict: dict = None):
+        if not self.offline_modus:
+            input_dict = self._online_pre_do_step()
+        
+        for building_ix in range(5):
+            heat_demand = self.actual_data.iloc[self.n][('heating', building_ix)]
+            input_dict[f'thermalDemand{building_ix}'] = heat_demand
+            
         self.fmu.do_step(input_dict)
         
+        offline_dict = {}
         for modelica_variable in self.attr_translation:
         
             soc = self.fmu.get_value(modelica_variable) / 3600
             attr = self.attributes[self.attr_translation[modelica_variable]]
-            attr.value = soc
-            attr.push()
             
+            offline_dict[self.attr_translation[modelica_variable]] = soc
+            attr.value = soc
+            if not self.offline_modus:
+                attr.push()
+        
         for name in ['thermalDemand0',
                     'thermalDemand1',
                     'thermalDemand2',
@@ -128,10 +165,34 @@ class ModelicaAgent(Device):
                     'thermalDemand4']:
             attr = self.attributes[name]
             attr.value = input_dict[name]
-            attr.push()
+            offline_dict[name] = input_dict[name]
+            if not self.offline_modus:
+                attr.push()
             
-        self.logger.info('Push of attributes succesful')
+            prev_name = f'{name}_prev'
+            attr_prev = self.attributes[prev_name]
+            values = self._shift_values(attr_prev.value, attr.value)
+            offline_dict[prev_name] = values
+            attr_prev.value = values        
+            if not self.offline_modus:    
+                attr_prev.push()
+            
+        attr = self.attributes['sinTime']
+
+        values = self._shift_values(attr.value, self.n % 24)
+        
+        attr.value = values
+        offline_dict['sinTime'] = values
+        
+        if not self.offline_modus:
+            attr.push()
+            self.logger.info('Push of attributes succesful')
+            
         self.fmu.current_time += settings.TIMESTEP
+        self.n += 1
+        if self.offline_modus:
+            return offline_dict
+        
         ct = time.perf_counter() 
         sleep_time = (settings.CYCLE_TIME - (ct - self.current_time))
         
@@ -144,7 +205,7 @@ class ModelicaAgent(Device):
             
 
 if __name__ == '__main__':
-    #clean_up()
+    clean_up()
     schema_path = Path(__file__).parents[1] / 'data_models' /\
         'schema' / 'ModelicaAgent.json'
     with open(schema_path) as f:

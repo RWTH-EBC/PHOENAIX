@@ -17,21 +17,35 @@ from requests.exceptions import HTTPError
 import traceback
 import time
 import paho.mqtt.client as mqtt
+import threading
+import numpy as np
 
 
 class MPC(Device):
-    def __init__(self, *args, **kwargs):
+    def __init__(self,
+                 offline_modus: bool = False,
+                 *args,
+                 **kwargs):
         super().__init__(*args, **kwargs)
+        self.offline_modus = offline_modus
 
         self.n_horizon = settings.N_HORIZON
         self.buildings = self.load_buildings()
         self.mpc_params = self.load_mpc_params()
         
-        self.mqtt_client = mqtt.Client()
-        self.mqtt_client.on_connect = self.on_connect
-        self.mqtt_client.on_message = self.on_message
-        self.mqtt_client.connect(host=settings.MQTT_HOST,
-                                 port=settings.MQTT_PORT)
+        if not self.offline_modus:
+        
+            self.mqtt_client = mqtt.Client()
+            self.mqtt_client.on_connect = self.on_connect
+            self.mqtt_client.on_message = self.on_message
+            self.mqtt_client.connect(host=settings.MQTT_HOST,
+                                    port=settings.MQTT_PORT)
+            
+            self.mqtt_client2 = mqtt.Client()
+            self.mqtt_client2.on_connect = self.on_connect2
+            self.mqtt_client2.on_message = self.on_message2
+            self.mqtt_client2.connect(host=settings.MQTT_HOST,
+                                    port=settings.MQTT_PORT)
 
         self.attr_translation = {
             'electricityDemand': 'elec',
@@ -56,6 +70,22 @@ class MPC(Device):
                 name=name,
                 initial_value=None
             )
+            
+        self.got_predictions = {
+            0: False,
+            1: False,
+            2: False,
+            3: False,
+            4: False
+        }
+        
+        self.prediction_counter = {
+            0: 0,
+            1: 0,
+            2: 0,
+            3: 0,
+            4: 0
+        }
 
     @staticmethod
     def load_buildings():
@@ -144,6 +174,10 @@ class MPC(Device):
                 4: {'tes': 0},
             }}
             self.logger.info('Got SOC init from fiware')
+            
+            if any(i is None for i in [ent['SOC1'], ent['SOC2'], ent['SOC3']]):
+                self.logger.info('None values in SOC init from fiware. Using default')
+                return None
             return soc_init
         except HTTPError:
             self.logger.warning('Couldnt get SOC_init, using default')
@@ -154,21 +188,84 @@ class MPC(Device):
         # Subscribe to the /predict topic
         client.subscribe(self.topic)
         
-    def on_message(self, client, userdata, msg):
-        if msg.topic != self.topic:
-            return
-        for building_ix in range(5):
-            topic=f'/predict{building_ix}'
-            self.mqtt_client.publish(topic=topic)
-        time.sleep(0.1)
-        self.predict()
+    def on_connect2(self, client, userdata, flags, rc):
+        print(f"Connected {self.__class__.__name__} 2 with result code "+str(rc))
+        # Subscribe to the /predict topic
+        client.subscribe('/predicted')
         
-    def run(self):
-        self.mqtt_client.loop_forever()
+    def _publish(self, building_ix):
+        mqtt_client = mqtt.Client()
+        mqtt_client.connect(host=settings.MQTT_HOST,
+                            port=settings.MQTT_PORT)
+        mqtt_client.publish(f'/predict{building_ix}')
+        mqtt_client.disconnect()
+        
+    def on_message(self, client, userdata, msg):        
+        threads = []
+        for building_ix in range(5):
+            thread = threading.Thread(target=self._publish, args=(building_ix,))
+            threads.append(thread)
+            thread.start()
             
-    def predict(self):
+        for thread in threads:
+            thread.join()
+
+        
+        threading.Thread(target=self.predict).start()
+        
+    def on_message2(self, client, userdata, msg):
+        data = json.loads(msg.payload)
+        building_id = data['building_id']
+        current_ix = data['current_ix']
+        self.got_predictions[building_id] = True
+        self.prediction_counter[building_id] = current_ix
+
+    def run_client1(self):
+        self.mqtt_client.loop_forever()
+    def run_client2(self):
+        self.mqtt_client2.loop_forever()
+                 
+    def run(self):
+        threading.Thread(target=self.run_client1).start()
+        threading.Thread(target=self.run_client2).start()
+        
+    def _got_predictions(self):
+    
+        if np.all(list(self.got_predictions.values())):
+            return True
+        else:
+            return False
+        
+    def _reset_predictions(self):
+        for key in self.got_predictions:
+            self.got_predictions[key] = False
+
+    def _online_pre_predict_process(self):
+        log_waiting = True
+        start_time = time.perf_counter()
+        while not self._got_predictions():
+            time.sleep(0.5)
+            print(self.prediction_counter)
+            this_time = time.perf_counter()
+            if this_time - start_time > 5:
+                for key, val in self.got_predictions.items():
+                    if val:
+                        continue
+                
+                    self.logger.info(f'Sending {key} again')
+                    threading.Thread(target=self._publish, args=(key,)).start()  
+                
+                start_time = this_time  
+            if log_waiting:
+                self.logger.info('Waiting for all predictions...')
+            log_waiting = False
+        
+        if not log_waiting:
+            self.logger.info('Got all predictions!')
+            
         try:
             input_dict = self.get_input_dict_from_fiware()
+            
             self.logger.info('Got input successfully')
         except HTTPError as e:
             error_message = str(e)
@@ -176,7 +273,22 @@ class MPC(Device):
             self.logger.error(f"OperationalError occurred: {error_message}\nStack Trace:\n{stack_trace}")
             return
         
+        self._reset_predictions()
+        
         soc_init = self.get_soc_init()
+        
+        return (input_dict,
+                soc_init)
+        
+            
+    def predict(self,
+                input_dict: dict = None,
+                soc_init: dict = None):
+        
+        if not self.offline_modus:
+            (input_dict, 
+             soc_init) = self._online_pre_predict_process()
+        
             
         res = self.run_central_optimization(
             demands_and_pv=input_dict,
@@ -196,6 +308,18 @@ class MPC(Device):
         self.attributes['SOCpred1'].value = res_soc[1]['tes'][0]
         self.attributes['SOCpred2'].value = res_soc[2]['tes'][0]
         self.attributes['SOCpred3'].value = res_soc[3]['tes'][0]
+        
+        offline_dict = {}
+        offline_dict['relativePower1'] = res_power[1]['hp'][0] / settings.NORM_POWER
+        offline_dict['relativePower2'] = res_power[2]['hp'][0] / settings.NORM_POWER
+        offline_dict['relativePower3'] = res_power[3]['hp'][0] / settings.NORM_POWER
+        offline_dict['SOCpred1'] = res_soc[1]['tes'][0]
+        offline_dict['SOCpred2'] = res_soc[2]['tes'][0]
+        offline_dict['SOCpred3'] = res_soc[3]['tes'][0]
+        
+        if self.offline_modus:
+            return offline_dict
+        
         
         for attr in self.attributes.values():
             attr.push()
