@@ -6,10 +6,15 @@ from filip.models.ngsi_v2.context import NamedContextAttribute
 
 
 class Attribute:
-    def __init__(self, device: Device, name: str, initial_value: Any = None):
+    def __init__(self, 
+                 device: Device, 
+                 name: str, 
+                 initial_value: Any = None,
+                 is_array: bool = False):
         self.device = device
         self.name = name
         self.value = initial_value
+        self.is_array = is_array
 
     def pull_history(self, **kwargs) -> TimeSeries:
         """
@@ -33,7 +38,8 @@ class Attribute:
             attr_name=self.name
         )
 
-    def push(self, timestamp: str = None):
+    def push(self, 
+             timestamp: str = None):
         """
         Push data to fiware
 
@@ -51,13 +57,22 @@ class Attribute:
         #     attr_name=self.name,
         #     value=self.value
         # )
-        attribute = NamedContextAttribute(
-            name=self.name,
-            # TODO solution
-            type="Number",
-            value=self.value,
-            metadata=metadata
-        )
+        
+        if self.is_array:            
+            attribute = NamedContextAttribute(
+                name=self.name,
+                # TODO solution
+                type="Array",
+                value=self.value
+            )
+        else:
+            attribute = NamedContextAttribute(
+                name=self.name,
+                # TODO solution
+                type="Number",
+                value=self.value,
+                metadata=metadata
+            )          
         self.device.cb_client.update_entity_attribute(
             entity_id=self.device.entity_id,
             entity_type=self.device.entity_type,

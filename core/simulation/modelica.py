@@ -7,6 +7,7 @@ import gurobipy as gp
 import os
 import json
 from pprint import pprint
+import numpy as np
 import pandas as pd
 from config.definitions import ROOT_DIR
 from core.settings import settings
@@ -65,6 +66,20 @@ class ModelicaAgent(Device):
                 initial_value=None
             )
             
+            self.attributes[f'{name}_prev'] = Attribute(
+                device=self,
+                name=f'{name}_prev',
+                initial_value=[None, None, None],
+                is_array=True
+            )
+            
+        self.attributes['sinTime'] = Attribute(
+            device=self,
+            name='sinTime',
+            initial_value=[None, None, None],
+            is_array=True
+        )
+
         self.current_time = time.perf_counter()
             
     def get_input_dict_from_fiware(self):
@@ -81,7 +96,6 @@ class ModelicaAgent(Device):
                                                        attr_name=name)
             
             input_dict[name] = attr_value
-
         return input_dict
     
     def on_connect(self, client, userdata, flags, rc):
@@ -96,6 +110,12 @@ class ModelicaAgent(Device):
         
     def run(self):
         self.mqtt_client.loop_forever()
+        
+    def _shift_values(self, values, value):
+        values[:-1] = values[1:]
+        values[-1] = value
+        
+        return values
 
             
     def do_step(self):
@@ -120,7 +140,7 @@ class ModelicaAgent(Device):
             attr = self.attributes[self.attr_translation[modelica_variable]]
             attr.value = soc
             attr.push()
-            
+        
         for name in ['thermalDemand0',
                     'thermalDemand1',
                     'thermalDemand2',
@@ -129,6 +149,18 @@ class ModelicaAgent(Device):
             attr = self.attributes[name]
             attr.value = input_dict[name]
             attr.push()
+            
+            attr_prev = self.attributes[f'{name}_prev']
+            values = self._shift_values(attr_prev.value, attr.value)
+            attr_prev.value = values            
+            attr_prev.push()
+            
+        attr = self.attributes['sinTime']
+
+        values = self._shift_values(attr.value, self.n % 24)
+        
+        attr.value = values
+        attr.push()
             
         self.logger.info('Push of attributes succesful')
         self.fmu.current_time += settings.TIMESTEP
@@ -140,11 +172,12 @@ class ModelicaAgent(Device):
         else:
             time.sleep(sleep_time)
         self.current_time = ct
+        self.n += 1
         self.mqtt_client.publish('/mpc')
             
 
 if __name__ == '__main__':
-    #clean_up()
+    clean_up()
     schema_path = Path(__file__).parents[1] / 'data_models' /\
         'schema' / 'ModelicaAgent.json'
     with open(schema_path) as f:
