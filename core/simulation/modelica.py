@@ -85,9 +85,9 @@ class ModelicaAgent(Device):
             is_array=True
         )
 
-            )
+    
             
-            self.attributes[f'{name}_prev'] = Attribute(
+        self.attributes[f'{name}_prev'] = Attribute(
                 device=self,
                 name=f'{name}_prev',
                 initial_value=[None, None, None],

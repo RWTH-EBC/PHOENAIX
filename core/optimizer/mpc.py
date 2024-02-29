@@ -21,6 +21,7 @@ import threading
 import numpy as np
 import threading
 import numpy as np
+from datetime import datetime
 
 
 class MPC(Device):
@@ -37,17 +38,17 @@ class MPC(Device):
         
         if not self.offline_modus:
         
-        self.mqtt_client = mqtt.Client()
-        self.mqtt_client.on_connect = self.on_connect
-        self.mqtt_client.on_message = self.on_message
-        self.mqtt_client.connect(host=settings.MQTT_HOST,
-                                 port=settings.MQTT_PORT)
-        
-        self.mqtt_client2 = mqtt.Client()
-        self.mqtt_client2.on_connect = self.on_connect2
-        self.mqtt_client2.on_message = self.on_message2
-        self.mqtt_client2.connect(host=settings.MQTT_HOST,
-                                  port=settings.MQTT_PORT)
+            self.mqtt_client = mqtt.Client()
+            self.mqtt_client.on_connect = self.on_connect
+            self.mqtt_client.on_message = self.on_message
+            self.mqtt_client.connect(host=settings.MQTT_HOST,
+                                    port=settings.MQTT_PORT)
+            
+            self.mqtt_client2 = mqtt.Client()
+            self.mqtt_client2.on_connect = self.on_connect2
+            self.mqtt_client2.on_message = self.on_message2
+            self.mqtt_client2.connect(host=settings.MQTT_HOST,
+                                    port=settings.MQTT_PORT)
 
         self.attr_translation = {
             'electricityDemand': 'elec',
@@ -337,6 +338,12 @@ class MPC(Device):
             buildings=self.buildings,
             silence=True
         )
+        
+        if res is None:
+            if self.offline_modus:
+                return None
+            self.logger.error('MPC infeasible! Not pushing attributes.')
+            self.mqtt_client.publish('/fmu')
 
         res_power = res[1]
         res_soc = res[3]
@@ -786,17 +793,28 @@ class MPC(Device):
         # Execute calculation
         model.optimize()
         if model.status == gp.GRB.Status.INFEASIBLE or model.status == gp.GRB.Status.INF_OR_UNBD:
+            now = datetime.now()
+            folder_name = now.strftime("error_%Y_%m_%d_%H_%M_%S")
+            folder_path = Path(__file__).parents[0] / folder_name
+            folder_path.mkdir(exist_ok=True)
+
             IISconstr = []
             model.computeIIS()
-            f = open('errorfile_hp.txt', 'w')
-            f.write('\nThe following constraint(s) cannot be satisfied:\n')
-            for c in model.getConstrs():
-                if c.IISConstr:
-                    print(c.constrName)
-                    f.write('%s' % c.constrName)
-                    f.write('\n')
-                    IISconstr.append(c.constrName)
-            f.close()
+            
+            with open(folder_path / 'errorfile_hp.txt', 'w') as f:
+                f.write('\nThe following constraint(s) cannot be satisfied:\n')
+                for c in model.getConstrs():
+                    if c.IISConstr:
+                        print(c.constrName)
+                        f.write('%s' % c.constrName)
+                        f.write('\n')
+                        IISconstr.append(c.constrName)
+
+            
+            #model.write("model_solution.sol")  # Writes the solution to a file
+            model_path = folder_path / 'model.ilp'
+            model.write(str(model_path))
+            return None
         model.update()
 
         # Retrieve results

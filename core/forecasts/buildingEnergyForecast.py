@@ -75,9 +75,6 @@ class BuildingEnergyForecast(Device):
         self.predictor = HeatingDemandLearner(building_ix=self.building_ix)
         self.predictor.get_model(n_horizon=self.n_horizon)
         self.logger.info('Heat Predictor learned')
-        self.predictor = HeatingDemandLearner(building_ix=self.building_ix)
-        self.predictor.get_model(n_horizon=self.n_horizon)
-        self.logger.info('Heat Predictor learned')
 
         # TODO 3600 is at the moment hardcoded as .iloc[::4]
         important_columns = list(self.attribute_df_dict.values())
