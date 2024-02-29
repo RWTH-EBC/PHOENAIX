@@ -136,7 +136,7 @@ class BuildingEnergyForecast(Device):
         # Subscribe to the /predict topic
         client.subscribe(self.topic)
         print(f'Subscribed to topic {self.topic}')
-        print(f'Subscribed to topic {self.topic}')
+
     def on_message(self, client, userdata, msg):
         if msg.topic != self.topic:
             return
@@ -202,7 +202,8 @@ class BuildingEnergyForecast(Device):
             attr.value = attr_values
             if not self.offline_modus:
                 attr.push()
-                self.logger.info('Push successfull')
+        if not self.offline_modus:
+            self.logger.info('Push successfull')
     
         payload = {'building_id': self.building_ix,
                    'current_ix': self.ix}
