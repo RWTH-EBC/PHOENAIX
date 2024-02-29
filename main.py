@@ -7,14 +7,28 @@ from core.utils.fiware_utils import clean_up
 import copy
 import logging
 import threading
+import threading
 
 #logging.basicConfig(level=logging.WARNING)
 
+def run_forecasts(building_ix):
 def run_forecasts(building_ix):
     schema_path = Path(__file__).parents[0] / 'core' / 'data_models' /\
         'schema' / 'BuildingEnergyForecast.json'
     with open(schema_path) as f:
         data_model = json.load(f)
+
+    entity_id = f'BuildingEnergyForecast:DEQ:MVP:{"{:03}".format(building_ix)}'
+    building_energy_forecast = BuildingEnergyForecast(
+        entity_id=entity_id,
+        entity_type="BuildingEnergyForecast",
+        building_ix=building_ix,
+        data_model=copy.deepcopy(data_model)  # necessary because id gets popped from data_model. TODO change that in json schema to fiware converter
+    )
+    building_energy_forecast.logger.setLevel(logging.INFO)
+    building_energy_forecast.run()
+        
+def run_mpc():
 
     entity_id = f'BuildingEnergyForecast:DEQ:MVP:{"{:03}".format(building_ix)}'
     building_energy_forecast = BuildingEnergyForecast(
@@ -38,7 +52,10 @@ def run_mpc():
         save_history=True        
     )
     mpc.run()
+    mpc.run()
     
+
+def run_modelica():
 
 def run_modelica():
     schema_path = Path(__file__).parents[0] / 'core' / 'data_models' /\

@@ -11,7 +11,21 @@ import json
 import time
 from core.machine_learning.heat_demand_forecast import HeatingDemandLearner
 import paho.mqtt.client as mqtt
+from requests.exceptions import HTTPError
+from core.utils.setup_logger import setup_logger
+from core.settings import settings
+from core.utils.load_demands import load_demands_and_pv
+from core.data_models import Device
+from core.data_models import Attribute
+from config.definitions import ROOT_DIR
+from core.utils.fiware_utils import clean_up
+import pandas as pd
+import json
+import time
+from core.machine_learning.heat_demand_forecast import HeatingDemandLearner
+import paho.mqtt.client as mqtt
 from pathlib import Path
+import numpy as np
 import numpy as np
 import sys
 p = str(Path(__file__).parents[2])
@@ -41,6 +55,7 @@ class BuildingEnergyForecast(Device):
         self.n_horizon = settings.N_HORIZON
         self.timestep = settings.TIMESTEP
 
+
         self.building_ix = building_ix
         self.topic = f"/predict{self.building_ix}"
 
@@ -52,9 +67,14 @@ class BuildingEnergyForecast(Device):
             'pvPower': ('pv_power', building_ix)
         }
 
+
         self.logger = setup_logger(name=kwargs['entity_id'])
 
+
         self.ix = 0
+        self.predictor = HeatingDemandLearner(building_ix=self.building_ix)
+        self.predictor.get_model(n_horizon=self.n_horizon)
+        self.logger.info('Heat Predictor learned')
         self.predictor = HeatingDemandLearner(building_ix=self.building_ix)
         self.predictor.get_model(n_horizon=self.n_horizon)
         self.logger.info('Heat Predictor learned')
@@ -63,6 +83,7 @@ class BuildingEnergyForecast(Device):
         important_columns = list(self.attribute_df_dict.values())
         self.load_demands_and_pv = load_demands_and_pv()[
             important_columns].iloc[::4].copy()
+
 
         self.max_n = self.load_demands_and_pv.shape[0]
 
@@ -73,11 +94,13 @@ class BuildingEnergyForecast(Device):
             initial_value=None
         )
 
+
         self.heatingDemand = Attribute(
             device=self,
             name="heatingDemand",
             initial_value=None
         )
+
 
         self.coolingDemand = Attribute(
             device=self,
@@ -85,17 +108,20 @@ class BuildingEnergyForecast(Device):
             initial_value=None
         )
 
+
         self.dhwDemand = Attribute(
             device=self,
             name="dhwDemand",
             initial_value=None
         )
 
+
         self.pvPower = Attribute(
             device=self,
             name="pvPower",
             initial_value=None
         )
+
 
         self.attribute_name_dict = {
             'electricityDemand': self.electricityDemand,
@@ -107,10 +133,12 @@ class BuildingEnergyForecast(Device):
 
         assert self.attribute_df_dict.keys() == self.attribute_name_dict.keys()
 
+
     def on_connect(self, client, userdata, flags, rc):
         print("Connected with result code "+str(rc))
         # Subscribe to the /predict topic
         client.subscribe(self.topic)
+        print(f'Subscribed to topic {self.topic}')
         print(f'Subscribed to topic {self.topic}')
     def on_message(self, client, userdata, msg):
         if msg.topic != self.topic:
@@ -198,7 +226,10 @@ class BuildingEnergyForecast(Device):
         self.mqtt_client.loop_forever()
 
 
+
+
 if __name__ == '__main__':
+    # clean_up()
     # clean_up()
     schema_path = Path(__file__).parents[1] / 'data_models' /\
         'schema' / 'BuildingEnergyForecast.json'
@@ -211,5 +242,6 @@ if __name__ == '__main__':
         building_ix=0,
         data_model=data_model,
     )
+
 
     building_energy_forecast.run_in_thread()

@@ -8,6 +8,7 @@ import os
 import json
 from pprint import pprint
 import numpy as np
+import numpy as np
 import pandas as pd
 from config.definitions import ROOT_DIR
 from core.settings import settings
@@ -68,6 +69,22 @@ class ModelicaAgent(Device):
                 device=self,
                 name=name,
                 initial_value=None
+            )
+            
+            self.attributes[f'{name}_prev'] = Attribute(
+                device=self,
+                name=f'{name}_prev',
+                initial_value=[None, None, None],
+                is_array=True
+            )
+            
+        self.attributes['sinTime'] = Attribute(
+            device=self,
+            name='sinTime',
+            initial_value=[None, None, None],
+            is_array=True
+        )
+
             )
             
             self.attributes[f'{name}_prev'] = Attribute(
@@ -201,10 +218,12 @@ class ModelicaAgent(Device):
         else:
             time.sleep(sleep_time)
         self.current_time = ct
+        self.n += 1
         self.mqtt_client.publish('/mpc')
             
 
 if __name__ == '__main__':
+    clean_up()
     clean_up()
     schema_path = Path(__file__).parents[1] / 'data_models' /\
         'schema' / 'ModelicaAgent.json'

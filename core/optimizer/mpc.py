@@ -19,6 +19,8 @@ import time
 import paho.mqtt.client as mqtt
 import threading
 import numpy as np
+import threading
+import numpy as np
 
 
 class MPC(Device):
@@ -35,17 +37,17 @@ class MPC(Device):
         
         if not self.offline_modus:
         
-            self.mqtt_client = mqtt.Client()
-            self.mqtt_client.on_connect = self.on_connect
-            self.mqtt_client.on_message = self.on_message
-            self.mqtt_client.connect(host=settings.MQTT_HOST,
-                                    port=settings.MQTT_PORT)
-            
-            self.mqtt_client2 = mqtt.Client()
-            self.mqtt_client2.on_connect = self.on_connect2
-            self.mqtt_client2.on_message = self.on_message2
-            self.mqtt_client2.connect(host=settings.MQTT_HOST,
-                                    port=settings.MQTT_PORT)
+        self.mqtt_client = mqtt.Client()
+        self.mqtt_client.on_connect = self.on_connect
+        self.mqtt_client.on_message = self.on_message
+        self.mqtt_client.connect(host=settings.MQTT_HOST,
+                                 port=settings.MQTT_PORT)
+        
+        self.mqtt_client2 = mqtt.Client()
+        self.mqtt_client2.on_connect = self.on_connect2
+        self.mqtt_client2.on_message = self.on_message2
+        self.mqtt_client2.connect(host=settings.MQTT_HOST,
+                                  port=settings.MQTT_PORT)
 
         self.attr_translation = {
             'electricityDemand': 'elec',
@@ -70,6 +72,22 @@ class MPC(Device):
                 name=name,
                 initial_value=None
             )
+            
+        self.got_predictions = {
+            0: False,
+            1: False,
+            2: False,
+            3: False,
+            4: False
+        }
+        
+        self.prediction_counter = {
+            0: 0,
+            1: 0,
+            2: 0,
+            3: 0,
+            4: 0
+        }
             
         self.got_predictions = {
             0: False,
@@ -178,6 +196,10 @@ class MPC(Device):
             if any(i is None for i in [ent['SOC1'], ent['SOC2'], ent['SOC3']]):
                 self.logger.info('None values in SOC init from fiware. Using default')
                 return None
+            
+            if any(i is None for i in [ent['SOC1'], ent['SOC2'], ent['SOC3']]):
+                self.logger.info('None values in SOC init from fiware. Using default')
+                return None
             return soc_init
         except HTTPError:
             self.logger.warning('Couldnt get SOC_init, using default')
@@ -188,6 +210,20 @@ class MPC(Device):
         # Subscribe to the /predict topic
         client.subscribe(self.topic)
         
+    def on_connect2(self, client, userdata, flags, rc):
+        print(f"Connected {self.__class__.__name__} 2 with result code "+str(rc))
+        # Subscribe to the /predict topic
+        client.subscribe('/predicted')
+        
+    def _publish(self, building_ix):
+        mqtt_client = mqtt.Client()
+        mqtt_client.connect(host=settings.MQTT_HOST,
+                            port=settings.MQTT_PORT)
+        mqtt_client.publish(f'/predict{building_ix}')
+        mqtt_client.disconnect()
+        
+    def on_message(self, client, userdata, msg):        
+        threads = []
     def on_connect2(self, client, userdata, flags, rc):
         print(f"Connected {self.__class__.__name__} 2 with result code "+str(rc))
         # Subscribe to the /predict topic
@@ -266,12 +302,15 @@ class MPC(Device):
         try:
             input_dict = self.get_input_dict_from_fiware()
             
+            
             self.logger.info('Got input successfully')
         except HTTPError as e:
             error_message = str(e)
             stack_trace = traceback.format_exc()
             self.logger.error(f"OperationalError occurred: {error_message}\nStack Trace:\n{stack_trace}")
             return
+        
+        self._reset_predictions()
         
         self._reset_predictions()
         
