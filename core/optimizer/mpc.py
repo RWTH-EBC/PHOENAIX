@@ -223,13 +223,6 @@ class MPC(Device):
         mqtt_client.publish(f'/predict{building_ix}')
         mqtt_client.disconnect()
         
-    def on_message(self, client, userdata, msg):        
-        threads = []
-    def on_connect2(self, client, userdata, flags, rc):
-        print(f"Connected {self.__class__.__name__} 2 with result code "+str(rc))
-        # Subscribe to the /predict topic
-        client.subscribe('/predicted')
-        
     def _publish(self, building_ix):
         mqtt_client = mqtt.Client()
         mqtt_client.connect(host=settings.MQTT_HOST,
@@ -340,9 +333,9 @@ class MPC(Device):
         )
         
         if res is None:
+            self.logger.error('MPC infeasible! Not pushing attributes.')
             if self.offline_modus:
                 return None
-            self.logger.error('MPC infeasible! Not pushing attributes.')
             self.mqtt_client.publish('/fmu')
 
         res_power = res[1]
@@ -795,8 +788,8 @@ class MPC(Device):
         if model.status == gp.GRB.Status.INFEASIBLE or model.status == gp.GRB.Status.INF_OR_UNBD:
             now = datetime.now()
             folder_name = now.strftime("error_%Y_%m_%d_%H_%M_%S")
-            folder_path = Path(__file__).parents[0] / folder_name
-            folder_path.mkdir(exist_ok=True)
+            folder_path = Path(__file__).parents[0] / 'errors' / folder_name
+            folder_path.mkdir(exist_ok=True, parents=True)
 
             IISconstr = []
             model.computeIIS()

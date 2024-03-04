@@ -187,6 +187,7 @@ class BuildingEnergyForecast(Device):
             self.logger.warning('NaNs in array. Filling with 0')
             y_hat = np.nan_to_num(y_hat)
 
+        y_hat[y_hat < 0] = 0
         data_this_step = self.load_demands_and_pv.iloc[self.ix: self.ix+self.n_horizon]
         
         offline_dict = {}
