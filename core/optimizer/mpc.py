@@ -223,12 +223,6 @@ class MPC(Device):
         mqtt_client.publish(f'/predict{building_ix}')
         mqtt_client.disconnect()
         
-    def _publish(self, building_ix):
-        mqtt_client = mqtt.Client()
-        mqtt_client.connect(host=settings.MQTT_HOST,
-                            port=settings.MQTT_PORT)
-        mqtt_client.publish(f'/predict{building_ix}')
-        mqtt_client.disconnect()
         
     def on_message(self, client, userdata, msg):        
         threads = []
@@ -303,8 +297,6 @@ class MPC(Device):
             stack_trace = traceback.format_exc()
             self.logger.error(f"OperationalError occurred: {error_message}\nStack Trace:\n{stack_trace}")
             return
-        
-        self._reset_predictions()
         
         self._reset_predictions()
         
