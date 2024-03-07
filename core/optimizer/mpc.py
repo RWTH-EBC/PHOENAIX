@@ -3,25 +3,21 @@ import sys
 p = str(Path(__file__).parents[2])
 if p not in sys.path:
     sys.path.insert(0, p)
-import gurobipy as gp
-import os
-import json
-from pprint import pprint
-import pandas as pd
-from config.definitions import ROOT_DIR
-from core.settings import settings
-from core.data_models import Device, Attribute
-from core.utils.setup_logger import setup_logger
-from core.utils.fiware_utils import clean_up
-from requests.exceptions import HTTPError
-import traceback
-import time
-import paho.mqtt.client as mqtt
-import threading
-import numpy as np
-import threading
-import numpy as np
 from datetime import datetime
+import numpy as np
+import threading
+import paho.mqtt.client as mqtt
+import time
+import traceback
+from requests.exceptions import HTTPError
+from core.utils.setup_logger import setup_logger
+from core.data_models import Device, Attribute
+from core.settings import settings
+from config.definitions import ROOT_DIR
+import pandas as pd
+import json
+import os
+import gurobipy as gp
 
 
 class MPC(Device):
@@ -35,20 +31,20 @@ class MPC(Device):
         self.n_horizon = settings.N_HORIZON
         self.buildings = self.load_buildings()
         self.mpc_params = self.load_mpc_params()
-        
+
         if not self.offline_modus:
-        
+
             self.mqtt_client = mqtt.Client()
             self.mqtt_client.on_connect = self.on_connect
             self.mqtt_client.on_message = self.on_message
             self.mqtt_client.connect(host=settings.MQTT_HOST,
-                                    port=settings.MQTT_PORT)
-            
+                                     port=settings.MQTT_PORT)
+
             self.mqtt_client2 = mqtt.Client()
             self.mqtt_client2.on_connect = self.on_connect2
             self.mqtt_client2.on_message = self.on_message2
             self.mqtt_client2.connect(host=settings.MQTT_HOST,
-                                    port=settings.MQTT_PORT)
+                                      port=settings.MQTT_PORT)
 
         self.attr_translation = {
             'electricityDemand': 'elec',
@@ -57,10 +53,10 @@ class MPC(Device):
             'dhwDemand': 'dhw',
             'pvPower': 'pv_power',
         }
-        
+
         self.topic = '/mpc'
         self.logger = setup_logger(name=kwargs['entity_id'])
-        
+
         self.attributes = {}
         for name in ['relativePower1',
                      'relativePower2',
@@ -73,7 +69,7 @@ class MPC(Device):
                 name=name,
                 initial_value=None
             )
-            
+
         self.got_predictions = {
             0: False,
             1: False,
@@ -81,23 +77,7 @@ class MPC(Device):
             3: False,
             4: False
         }
-        
-        self.prediction_counter = {
-            0: 0,
-            1: 0,
-            2: 0,
-            3: 0,
-            4: 0
-        }
-            
-        self.got_predictions = {
-            0: False,
-            1: False,
-            2: False,
-            3: False,
-            4: False
-        }
-        
+
         self.prediction_counter = {
             0: 0,
             1: 0,
@@ -193,50 +173,52 @@ class MPC(Device):
                 4: {'tes': 0},
             }}
             self.logger.info('Got SOC init from fiware')
-            
+
             if any(i is None for i in [ent['SOC1'], ent['SOC2'], ent['SOC3']]):
-                self.logger.info('None values in SOC init from fiware. Using default')
+                self.logger.info(
+                    'None values in SOC init from fiware. Using default')
                 return None
-            
+
             if any(i is None for i in [ent['SOC1'], ent['SOC2'], ent['SOC3']]):
-                self.logger.info('None values in SOC init from fiware. Using default')
+                self.logger.info(
+                    'None values in SOC init from fiware. Using default')
                 return None
             return soc_init
         except HTTPError:
             self.logger.warning('Couldnt get SOC_init, using default')
             return None
-        
+
     def on_connect(self, client, userdata, flags, rc):
         print(f"Connected {self.__class__.__name__} with result code "+str(rc))
         # Subscribe to the /predict topic
         client.subscribe(self.topic)
-        
+
     def on_connect2(self, client, userdata, flags, rc):
-        print(f"Connected {self.__class__.__name__} 2 with result code "+str(rc))
+        print(
+            f"Connected {self.__class__.__name__} 2 with result code "+str(rc))
         # Subscribe to the /predict topic
         client.subscribe('/predicted')
-        
+
     def _publish(self, building_ix):
         mqtt_client = mqtt.Client()
         mqtt_client.connect(host=settings.MQTT_HOST,
                             port=settings.MQTT_PORT)
         mqtt_client.publish(f'/predict{building_ix}')
         mqtt_client.disconnect()
-        
-        
-    def on_message(self, client, userdata, msg):        
+
+    def on_message(self, client, userdata, msg):
         threads = []
         for building_ix in range(5):
-            thread = threading.Thread(target=self._publish, args=(building_ix,))
+            thread = threading.Thread(
+                target=self._publish, args=(building_ix,))
             threads.append(thread)
             thread.start()
-            
+
         for thread in threads:
             thread.join()
 
-        
         threading.Thread(target=self.predict).start()
-        
+
     def on_message2(self, client, userdata, msg):
         data = json.loads(msg.payload)
         building_id = data['building_id']
@@ -246,20 +228,21 @@ class MPC(Device):
 
     def run_client1(self):
         self.mqtt_client.loop_forever()
+
     def run_client2(self):
         self.mqtt_client2.loop_forever()
-                 
+
     def run(self):
         threading.Thread(target=self.run_client1).start()
         threading.Thread(target=self.run_client2).start()
-        
+
     def _got_predictions(self):
-    
+
         if np.all(list(self.got_predictions.values())):
             return True
         else:
             return False
-        
+
     def _reset_predictions(self):
         for key in self.got_predictions:
             self.got_predictions[key] = False
@@ -275,46 +258,44 @@ class MPC(Device):
                 for key, val in self.got_predictions.items():
                     if val:
                         continue
-                
+
                     self.logger.info(f'Sending {key} again')
-                    threading.Thread(target=self._publish, args=(key,)).start()  
-                
-                start_time = this_time  
+                    threading.Thread(target=self._publish, args=(key,)).start()
+
+                start_time = this_time
             if log_waiting:
                 self.logger.info('Waiting for all predictions...')
             log_waiting = False
-        
+
         if not log_waiting:
             self.logger.info('Got all predictions!')
-            
+
         try:
             input_dict = self.get_input_dict_from_fiware()
-            
-            
+
             self.logger.info('Got input successfully')
         except HTTPError as e:
             error_message = str(e)
             stack_trace = traceback.format_exc()
-            self.logger.error(f"OperationalError occurred: {error_message}\nStack Trace:\n{stack_trace}")
+            self.logger.error(
+                f"OperationalError occurred: {error_message}\nStack Trace:\n{stack_trace}")
             return
-        
+
         self._reset_predictions()
-        
+
         soc_init = self.get_soc_init()
-        
+
         return (input_dict,
                 soc_init)
-        
-            
+
     def predict(self,
                 input_dict: dict = None,
                 soc_init: dict = None):
-        
+
         if not self.offline_modus:
-            (input_dict, 
+            (input_dict,
              soc_init) = self._online_pre_predict_process()
-        
-            
+
         res = self.run_central_optimization(
             demands_and_pv=input_dict,
             n_horizon=self.n_horizon,
@@ -323,7 +304,7 @@ class MPC(Device):
             buildings=self.buildings,
             silence=True
         )
-        
+
         if res is None:
             self.logger.error('MPC infeasible! Not pushing attributes.')
             if self.offline_modus:
@@ -332,31 +313,36 @@ class MPC(Device):
 
         res_power = res[1]
         res_soc = res[3]
-        
-        self.attributes['relativePower1'].value = res_power[1]['hp'][0] / settings.NORM_POWER
-        self.attributes['relativePower2'].value = res_power[2]['hp'][0] / settings.NORM_POWER
-        self.attributes['relativePower3'].value = res_power[3]['hp'][0] / settings.NORM_POWER
+
+        self.attributes['relativePower1'].value = res_power[1]['hp'][0] / \
+            settings.NORM_POWER
+        self.attributes['relativePower2'].value = res_power[2]['hp'][0] / \
+            settings.NORM_POWER
+        self.attributes['relativePower3'].value = res_power[3]['hp'][0] / \
+            settings.NORM_POWER
         self.attributes['SOCpred1'].value = res_soc[1]['tes'][0]
         self.attributes['SOCpred2'].value = res_soc[2]['tes'][0]
         self.attributes['SOCpred3'].value = res_soc[3]['tes'][0]
-        
+
         offline_dict = {}
-        offline_dict['relativePower1'] = res_power[1]['hp'][0] / settings.NORM_POWER
-        offline_dict['relativePower2'] = res_power[2]['hp'][0] / settings.NORM_POWER
-        offline_dict['relativePower3'] = res_power[3]['hp'][0] / settings.NORM_POWER
+        offline_dict['relativePower1'] = res_power[1]['hp'][0] / \
+            settings.NORM_POWER
+        offline_dict['relativePower2'] = res_power[2]['hp'][0] / \
+            settings.NORM_POWER
+        offline_dict['relativePower3'] = res_power[3]['hp'][0] / \
+            settings.NORM_POWER
         offline_dict['SOCpred1'] = res_soc[1]['tes'][0]
         offline_dict['SOCpred2'] = res_soc[2]['tes'][0]
         offline_dict['SOCpred3'] = res_soc[3]['tes'][0]
-        
+
         if self.offline_modus:
             return offline_dict
-        
-        
+
         for attr in self.attributes.values():
             attr.push()
-            
+
         self.logger.info('Pushed all attributes')
-        
+
         self.mqtt_client.publish('/fmu')
 
     def run_central_optimization(self,
@@ -785,7 +771,7 @@ class MPC(Device):
 
             IISconstr = []
             model.computeIIS()
-            
+
             with open(folder_path / 'errorfile_hp.txt', 'w') as f:
                 f.write('\nThe following constraint(s) cannot be satisfied:\n')
                 for c in model.getConstrs():
@@ -795,8 +781,7 @@ class MPC(Device):
                         f.write('\n')
                         IISconstr.append(c.constrName)
 
-            
-            #model.write("model_solution.sol")  # Writes the solution to a file
+            # model.write("model_solution.sol")  # Writes the solution to a file
             model_path = folder_path / 'model.ilp'
             model.write(str(model_path))
             return None
@@ -881,7 +866,7 @@ class MPC(Device):
 
 
 if __name__ == '__main__':
-    #clean_up()
+    # clean_up()
     schema_path = Path(__file__).parents[1] / 'data_models' /\
         'schema' / 'MPC.json'
     with open(schema_path) as f:
@@ -890,6 +875,6 @@ if __name__ == '__main__':
         entity_id='MPC:DEQ:MVP:000',
         entity_type='MPC',
         data_model=data_model,
-        save_history=True        
+        save_history=True
     )
     mpc.run()
