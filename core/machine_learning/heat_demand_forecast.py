@@ -5,12 +5,9 @@ from enstats.clustering.clustering_optimizer.system_identification \
 from ebcpy.data_types import TimeSeriesData as Tsd
 import pandas as pd
 import numpy as np
-from pprint import pprint
-from sampc.utils.multi_step_runner import calc_multi_step_error
-from sampc.utils.utils import get_output_position_change
+from .multi_step_utils import calc_multi_step_error, runner_segment_y, get_output_position_change
 from enstats.preprocessing.utils import tsd_preparation_from_feature_list
 from sklearn.metrics import mean_squared_error as mse
-from sampc.utils.multi_step_runner import runner_segment_y
 import numpy as np
 import warnings
 
@@ -88,9 +85,6 @@ class HeatingDemandLearner:
         self.run_data = tsd_preparation_from_feature_list(
             self.use_data, self.features)
 
-    def predict(self):
-        pass
-
     def _train_model(self,
                      use_data,
                      output_variables,
@@ -160,7 +154,6 @@ class HeatingDemandLearner:
             warnings.warn('No model trained yet')
             return
 
-        features = self.model_dict['features']
         coeffs = self.model_dict['coeffs']
 
         X = self.run_data[self.features].to_numpy()
@@ -168,8 +161,8 @@ class HeatingDemandLearner:
 
         x_list = [X]
         y_list = [y]
-        (error,
-         _y_arrays,
+        (_,
+         _,
          _y_pred_array) = calc_multi_step_error(x_list=x_list,
                                                 y_list=y_list,
                                                 out_is_dt=False,
@@ -219,7 +212,7 @@ class HeatingDemandLearner:
 
             if any(i in name for i in ['sin', 'ones']):
                 continue
-            
+
             if name not in shift_dict:
                 shift_dict[name] = []
 
@@ -240,13 +233,13 @@ class HeatingDemandLearner:
             data.loc[0: n-1, use_shift_vars] = matrix
 
         return data
-    
+
     @staticmethod
     def sin_extension(tsd,
                       n_horizon):
-        
+
         def apply_sin_calc(x):
-            try: 
+            try:
                 b = 2 * np.pi / 24
                 c = -np.pi / 2
                 return np.sin(b * x + c)
@@ -255,29 +248,31 @@ class HeatingDemandLearner:
                 return x
 
         assert (tsd.shape[0] == 1)
-        
-        new_rows = pd.DataFrame(np.nan, index=range(n_horizon - 1), columns=tsd.columns)
+
+        new_rows = pd.DataFrame(np.nan, index=range(
+            n_horizon - 1), columns=tsd.columns)
         df = pd.concat([tsd, new_rows], ignore_index=True)
         sin_cols = [i for i in list(df) if 'sin' in i[0]]
 
         for i in range(1, len(df)):
-            df.loc[df.index[i], sin_cols] = (df.loc[df.index[i-1], sin_cols] + 1) % 24
-        
-        
+            df.loc[df.index[i], sin_cols] = (
+                df.loc[df.index[i-1], sin_cols] + 1) % 24
+
         df[sin_cols] = df[sin_cols].apply(apply_sin_calc)
         if ('ones', 'raw') in list(df):
             df[('ones', 'raw')] = 1
-            
+
         return df
 
     def predict_n_steps(self,
                         input_tsd):
         input_tsd = self.sin_extension(tsd=input_tsd,
                                        n_horizon=self.n_horizon)
-        
+
         if input_tsd.shape[0] != self.n_horizon:
-            warnings.warn(f'The input tsd has {input_tsd.shape[0]} rows, but your n_horizon is {self.n_horizon}')
-        
+            warnings.warn(
+                f'The input tsd has {input_tsd.shape[0]} rows, but your n_horizon is {self.n_horizon}')
+
         input_tsd = self.data_shifter(input_tsd)
         u_array = input_tsd[self.features].to_numpy()
         y_array = np.full((u_array.shape[0], 1), np.nan)
@@ -286,5 +281,5 @@ class HeatingDemandLearner:
                                  u_array=u_array,
                                  w=self.coeffs,
                                  pos_change=self.out_pos)
-        
+
         return y_hat

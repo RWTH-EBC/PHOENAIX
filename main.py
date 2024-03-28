@@ -7,9 +7,6 @@ from core.utils.fiware_utils import clean_up
 import copy
 import logging
 import threading
-import threading
-
-#logging.basicConfig(level=logging.WARNING)
 
 def run_forecasts(building_ix):
     schema_path = Path(__file__).parents[0] / 'core' / 'data_models' /\
