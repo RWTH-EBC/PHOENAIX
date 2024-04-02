@@ -1,4 +1,5 @@
-from pydantic import Field, BaseSettings, AnyUrl
+from pydantic import Field, AnyUrl
+from pydantic_settings import BaseSettings
 from dotenv import find_dotenv
 from filip.models.base import FiwareHeader
 from config.definitions import ROOT_DIR

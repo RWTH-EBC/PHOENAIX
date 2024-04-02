@@ -209,8 +209,9 @@ class ModelicaAgent(Device):
             self.logger.warning(
                 f'Negative sleep time {sleep_time} --> adjust cycle time')
         else:
+            self.logger.info(f'Sleeping {sleep_time}s')
             time.sleep(sleep_time)
-        self.current_time = ct
+        self.current_time = time.perf_counter()
         self.mqtt_client.publish('/mpc')
 
 
