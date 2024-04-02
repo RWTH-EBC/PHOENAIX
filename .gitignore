@@ -1,5 +1,14 @@
 # Ignore the following files in GIT #
 ######################################
+.ipynb_checkpoints
+errorfile_hp.txt
+
+# Rohdaten #
+#########################
+/00_Lokale_Rohdaten
+/data/01_input/01_weather
+
+
 
 # Python compiled files #
 #########################

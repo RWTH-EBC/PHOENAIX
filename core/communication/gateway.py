@@ -1,8 +1,6 @@
-import json
 from filip.clients.ngsi_v2.iota import IoTAClient
 from filip.clients.ngsi_v2.cb import ContextBrokerClient
 from filip.clients.ngsi_v2.quantumleap import QuantumLeapClient
-from filip.models.base import FiwareHeader
 from paho.mqtt.client import MQTTv5, Client, MQTT_CLEAN_START_FIRST_ONLY
 import requests
 from core.settings import settings
@@ -26,22 +24,20 @@ class Gateway:
 
         # Fiware header
         # TODO any other restriction?
-        service = settings.SCENARIO_NAME.strip().lower()
-        self.fiware_header = FiwareHeader(service=service, service_path="/")
         self.scenario_name = settings.SCENARIO_NAME
 
         # TODO each gateway one client?
         # IoTAgent Client
         s1 = requests.Session()
-        self.iota_client = IoTAClient(url=settings.IOTA_URL, fiware_header=self.fiware_header, session=s1)
+        self.iota_client = IoTAClient(url=settings.IOTA_URL, fiware_header=settings.fiware_header, session=s1)
 
         # CB Client
         s2 = requests.Session()
-        self.cb_client = ContextBrokerClient(url=settings.CB_URL, fiware_header=self.fiware_header, session=s2)
+        self.cb_client = ContextBrokerClient(url=settings.CB_URL, fiware_header=settings.fiware_header, session=s2)
 
         # QL Client
         s3 = requests.Session()
-        self.ql_client = QuantumLeapClient(url=settings.QL_URL, fiware_header=self.fiware_header, session=s3)
+        self.ql_client = QuantumLeapClient(url=settings.QL_URL, fiware_header=settings.fiware_header, session=s3)
 
     def health_check(self):
         self.mqtt_client.publish(topic="health/check", payload="health check")
