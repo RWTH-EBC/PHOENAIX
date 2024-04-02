@@ -1,5 +1,5 @@
 ebcpy==0.3.12
-git+https://github.com/RWTH-EBC/EnStATS.git@development#egg=EnStATS
+git+https://github.com/RWTH-EBC/EnStATS.git@master#egg=EnStATS
 filip==0.3.0
 FMPy==0.3.16
 gurobipy==10.0.3
