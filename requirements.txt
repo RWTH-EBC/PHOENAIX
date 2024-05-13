@@ -1,6 +1,6 @@
 ebcpy==0.3.12
 git+https://github.com/RWTH-EBC/EnStATS.git@master#egg=EnStATS
-filip==0.3.0
+filip==0.4.1
 FMPy==0.3.16
 gurobipy==10.0.3
 matplotlib==3.8.1
