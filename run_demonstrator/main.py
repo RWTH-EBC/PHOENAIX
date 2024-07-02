@@ -1,15 +1,16 @@
 import json
-from core.forecasts.buildingEnergyForecast import BuildingEnergyForecast
-from core.optimizer.mpc import MPC
-from core.simulation.modelica import ModelicaAgent
+from deq_demonstrator.forecasts.buildingEnergyForecast import BuildingEnergyForecast
+from deq_demonstrator.optimizer.mpc import MPC
+from deq_demonstrator.simulation.modelica import ModelicaAgent
 from pathlib import Path
-from core.utils.fiware_utils import clean_up
+from deq_demonstrator.utils.fiware_utils import clean_up
+from deq_demonstrator.config import ROOT_DIR
 import copy
 import logging
 import threading
 
 def run_forecasts(building_ix):
-    schema_path = Path(__file__).parents[0] / 'core' / 'data_models' /\
+    schema_path = ROOT_DIR / 'deq_demonstrator' / 'data_models' /\
         'schema' / 'BuildingEnergyForecast.json'
     with open(schema_path) as f:
         data_model = json.load(f)
@@ -25,7 +26,7 @@ def run_forecasts(building_ix):
     building_energy_forecast.run()
                 
 def run_mpc():
-    schema_path = Path(__file__).parents[0] / 'core' / 'data_models' /\
+    schema_path = ROOT_DIR / 'deq_demonstrator' / 'data_models' /\
         'schema' / 'MPC.json'
     with open(schema_path) as f:
         data_model = json.load(f)
@@ -39,7 +40,7 @@ def run_mpc():
     
 
 def run_modelica():
-    schema_path = Path(__file__).parents[0] / 'core' / 'data_models' /\
+    schema_path = ROOT_DIR / 'deq_demonstrator' / 'data_models' /\
         'schema' / 'ModelicaAgent.json'
     with open(schema_path) as f:
         data_model = json.load(f)

@@ -1,7 +1,7 @@
 from filip.models.base import DataType, FiwareHeader
 from filip.models.ngsi_v2.context import NamedContextAttribute, ContextEntity
 from filip.utils.cleanup import clear_context_broker, clear_quantumleap
-from core.settings import settings
+from deq_demonstrator.settings import settings
 
 JSONSchemaMap = {
     "string": DataType.TEXT.value,

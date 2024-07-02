@@ -1,9 +1,9 @@
 from pathlib import Path
 import json
 import copy
-from core.forecasts.buildingEnergyForecast import BuildingEnergyForecast
-from core.optimizer.mpc import MPC
-from core.simulation.modelica import ModelicaAgent
+from deq_demonstrator.forecasts.buildingEnergyForecast import BuildingEnergyForecast
+from deq_demonstrator.optimizer.mpc import MPC
+from deq_demonstrator.simulation.modelica import ModelicaAgent
 from tqdm import tqdm
 import pandas as pd
 import copy

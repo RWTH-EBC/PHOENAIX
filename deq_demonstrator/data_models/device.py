@@ -1,7 +1,7 @@
 import abc
 import threading
-from core.communication import Gateway, subscription_template
-from core.utils import \
+from deq_demonstrator.communication import Gateway, subscription_template
+from deq_demonstrator.utils import \
     json_schema2context_attributes, \
     json_schema2context_entity
 from abc import ABC

@@ -3,7 +3,7 @@ from filip.clients.ngsi_v2.cb import ContextBrokerClient
 from filip.clients.ngsi_v2.quantumleap import QuantumLeapClient
 from paho.mqtt.client import MQTTv5, Client, MQTT_CLEAN_START_FIRST_ONLY
 import requests
-from core.settings import settings
+from deq_demonstrator.settings import settings
 
 
 class Gateway:

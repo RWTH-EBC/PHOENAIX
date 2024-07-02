@@ -1,18 +1,16 @@
-import sys
 from pathlib import Path
-p = str(Path(__file__).parents[2])
-if p not in sys.path:
-    sys.path.insert(0, p)
+from deq_demonstrator.machine_learning.heat_demand_forecast import HeatingDemandLearner
 import numpy as np
 import paho.mqtt.client as mqtt
-from core.machine_learning.heat_demand_forecast import HeatingDemandLearner
+from deq_demonstrator.machine_learning.heat_demand_forecast import HeatingDemandLearner
 import json
 import pandas as pd
-from core.utils.load_demands import load_demands_and_pv
-from core.settings import settings
-from core.utils.setup_logger import setup_logger
-from core.data_models import Attribute
-from core.data_models import Device
+from deq_demonstrator.utils.load_demands import load_demands_and_pv
+from deq_demonstrator.settings import settings
+from deq_demonstrator.utils.setup_logger import setup_logger
+from deq_demonstrator.data_models import Attribute
+from deq_demonstrator.data_models import Device
+from deq_demonstrator.config import ROOT_DIR
 from ebcpy import TimeSeriesData
 
 

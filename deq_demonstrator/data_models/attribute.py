@@ -1,4 +1,4 @@
-from core.data_models import Device
+from deq_demonstrator.data_models import Device
 from typing import Any
 from filip.models.ngsi_v2.timeseries import TimeSeries
 from filip.models.ngsi_v2.base import NamedMetadata

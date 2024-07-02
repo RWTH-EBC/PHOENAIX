@@ -1,8 +1,5 @@
-from pathlib import Path
 import sys
-p = str(Path(__file__).parents[2])
-if p not in sys.path:
-    sys.path.insert(0, p)
+from pathlib import Path
 from datetime import datetime
 import numpy as np
 import threading
@@ -10,10 +7,10 @@ import paho.mqtt.client as mqtt
 import time
 import traceback
 from requests.exceptions import HTTPError
-from core.utils.setup_logger import setup_logger
-from core.data_models import Device, Attribute
-from core.settings import settings
-from config.definitions import ROOT_DIR
+from deq_demonstrator.utils.setup_logger import setup_logger
+from deq_demonstrator.data_models import Device, Attribute
+from deq_demonstrator.settings import settings
+from deq_demonstrator.config import ROOT_DIR
 import pandas as pd
 import json
 import os
@@ -88,7 +85,7 @@ class MPC(Device):
 
     @staticmethod
     def load_buildings():
-        path = Path(ROOT_DIR) / 'data' / '01_input' / \
+        path = ROOT_DIR / 'data' / '01_input' / \
             '03_building_devs' / 'Devs.xlsx'
 
         n_buildings = 5

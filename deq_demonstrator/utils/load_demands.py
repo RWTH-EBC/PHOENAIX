@@ -1,9 +1,9 @@
 import pandas as pd
-from config.definitions import ROOT_DIR
+from deq_demonstrator.config import ROOT_DIR
 from pathlib import Path
 
-DEMANDS_PATH = Path(ROOT_DIR) / 'data' / '01_input' / '01_demands'
-PV_PATH = Path(ROOT_DIR) / 'data' / '01_input' / '04_pv_generation'
+DEMANDS_PATH = ROOT_DIR / 'data' / '01_input' / '01_demands'
+PV_PATH = ROOT_DIR / 'data' / '01_input' / '04_pv_generation'
 
 def load_demands_and_pv(year=2018):
     building_id_map = {
