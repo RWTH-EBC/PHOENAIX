@@ -89,6 +89,7 @@ class ModelicaAgent(Device):
             is_array=True
         )
 
+        self.stop_event = kwargs.get('stop_event', None)
         self.current_time = time.perf_counter()
 
     def get_input_dict_from_fiware(self):
@@ -115,7 +116,15 @@ class ModelicaAgent(Device):
         self.do_step()
 
     def run(self):
-        self.mqtt_client.loop_forever()
+        if self.stop_event is not None:
+            self.mqtt_client.loop_start()
+            while not self.stop_event.is_set():
+                time.sleep(1)
+            self.mqtt_client.loop_stop()
+
+        else:
+            self.mqtt_client.loop_forever()
+        #self.mqtt_client.loop_forever()
 
     def _shift_values(self, values, value):
         values[:-1] = values[1:]

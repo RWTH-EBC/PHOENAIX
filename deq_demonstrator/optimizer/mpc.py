@@ -82,6 +82,8 @@ class MPC(Device):
             3: 0,
             4: 0
         }
+        
+        self.stop_event = kwargs.get("stop_event", None)
 
     @staticmethod
     def load_buildings():
@@ -224,10 +226,26 @@ class MPC(Device):
         self.prediction_counter[building_id] = current_ix
 
     def run_client1(self):
-        self.mqtt_client.loop_forever()
+        if self.stop_event is not None:
+            self.mqtt_client.loop_start()
+            while not self.stop_event.is_set():
+                time.sleep(1)
+            self.mqtt_client.loop_stop()
+
+        else:
+            self.mqtt_client.loop_forever()
+       # self.mqtt_client.loop_forever()
 
     def run_client2(self):
-        self.mqtt_client2.loop_forever()
+        if self.stop_event is not None:
+            self.mqtt_client2.loop_start()
+            while not self.stop_event.is_set():
+                time.sleep(1)
+            self.mqtt_client2.loop_stop()
+
+        else:
+            self.mqtt_client.loop_forever()
+        #self.mqtt_client2.loop_forever()
 
     def run(self):
         threading.Thread(target=self.run_client1).start()

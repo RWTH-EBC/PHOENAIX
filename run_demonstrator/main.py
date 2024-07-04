@@ -8,8 +8,9 @@ from deq_demonstrator.config import ROOT_DIR
 import copy
 import logging
 import threading
+import time
 
-def run_forecasts(building_ix):
+def run_forecasts(building_ix, stop_event):
     schema_path = ROOT_DIR / 'deq_demonstrator' / 'data_models' /\
         'schema' / 'BuildingEnergyForecast.json'
     with open(schema_path) as f:
@@ -20,12 +21,13 @@ def run_forecasts(building_ix):
         entity_id=entity_id,
         entity_type="BuildingEnergyForecast",
         building_ix=building_ix,
-        data_model=copy.deepcopy(data_model)  # necessary because id gets popped from data_model. TODO change that in json schema to fiware converter
+        data_model=copy.deepcopy(data_model),# necessary because id gets popped from data_model. TODO change that in json schema to fiware converter,
+        stop_event=stop_event
     )
     building_energy_forecast.logger.setLevel(logging.INFO)
     building_energy_forecast.run()
                 
-def run_mpc():
+def run_mpc(stop_event):
     schema_path = ROOT_DIR / 'deq_demonstrator' / 'data_models' /\
         'schema' / 'MPC.json'
     with open(schema_path) as f:
@@ -34,12 +36,13 @@ def run_mpc():
         entity_id='MPC:DEQ:MVP:000',
         entity_type='MPC',
         data_model=data_model,
-        save_history=True        
+        save_history=True,
+        stop_event=stop_event
     )
     mpc.run()
     
 
-def run_modelica():
+def run_modelica(stop_event):
     schema_path = ROOT_DIR / 'deq_demonstrator' / 'data_models' /\
         'schema' / 'ModelicaAgent.json'
     with open(schema_path) as f:
@@ -48,20 +51,50 @@ def run_modelica():
         entity_id='ModelicaAgent:DEQ:MVP:000',
         entity_type='ModelicaAgent',
         data_model=data_model,
-        save_history=True        
+        save_history=True ,
+        stop_event=stop_event       
     )
     modelica.run()
 
 def main():
     clean_up()
+    print("Cleaned up")
+    stop_event = threading.Event()
     
+    threads = []
     for building_ix in range(5):
-        threading.Thread(target=run_forecasts, args=[building_ix]).start()
+        t = threading.Thread(target=run_forecasts, args=[building_ix, stop_event])
+        threads.append(t)
+        t.start()
         
+    print("Started building forecasts")
 
-    threading.Thread(target=run_mpc).start()
-    threading.Thread(target=run_modelica).start()
+    t = threading.Thread(target=run_mpc, args=[stop_event])
+    threads.append(t)
+    t.start()
     
+    print("Started MPC")
+    
+    t = threading.Thread(target=run_modelica, args=[stop_event])
+    threads.append(t)
+    t.start()
+    
+    print("Started Modelica")
+    
+    while True:
+        try:
+            time.sleep(1)
+        except KeyboardInterrupt:
+            print("KeyboadInterrupt received, stopping threads...")
+            stop_event.set()
+            break
+    
+    for t in threads:
+        t.join()
+        
+    print("All threads stopped")
+        
+        
     
 if __name__ == '__main__':
     main()
