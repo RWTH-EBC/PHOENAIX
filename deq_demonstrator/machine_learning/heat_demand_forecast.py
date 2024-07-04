@@ -1,11 +1,11 @@
-from core.utils.load_demands import load_demands_and_pv
+from deq_demonstrator.utils.load_demands import load_demands_and_pv
 import matplotlib.pyplot as plt
 from enstats.clustering.clustering_optimizer.system_identification \
     .one_step_optimization import OneStepOptimizationFROLS
 from ebcpy.data_types import TimeSeriesData as Tsd
 import pandas as pd
 import numpy as np
-from .multi_step_utils import calc_multi_step_error, runner_segment_y, get_output_position_change
+from deq_demonstrator.machine_learning.multi_step_utils import calc_multi_step_error, runner_segment_y, get_output_position_change
 from enstats.preprocessing.utils import tsd_preparation_from_feature_list
 from sklearn.metrics import mean_squared_error as mse
 import numpy as np

@@ -2,7 +2,7 @@ from pydantic import Field, AnyUrl
 from pydantic_settings import BaseSettings
 from dotenv import find_dotenv
 from filip.models.base import FiwareHeader
-from config.definitions import ROOT_DIR
+from deq_demonstrator.config import ROOT_DIR
 from pathlib import Path
 
 
@@ -34,7 +34,7 @@ class Settings(BaseSettings):
 
     class Config:
         case_sensitive = False
-        env_file = find_dotenv(Path(ROOT_DIR) / '.env')
+        env_file = find_dotenv(ROOT_DIR / '.env')
         env_file_encoding = "utf-8"
 
 

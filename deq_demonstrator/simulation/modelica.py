@@ -1,18 +1,14 @@
 from pathlib import Path
-import sys
-p = str(Path(__file__).parents[2])
-if p not in sys.path:
-    sys.path.insert(0, p)
-from core.utils.load_demands import load_demands_and_pv
+from deq_demonstrator.utils.load_demands import load_demands_and_pv
 import paho.mqtt.client as mqtt
-from .fmu_handler import FMUHandler
+from deq_demonstrator.simulation.fmu_handler import FMUHandler
 import time
 import traceback
 from requests.exceptions import HTTPError
-from core.utils.fiware_utils import clean_up
-from core.utils.setup_logger import setup_logger
-from core.data_models import Device, Attribute
-from core.settings import settings
+from deq_demonstrator.utils.fiware_utils import clean_up
+from deq_demonstrator.utils.setup_logger import setup_logger
+from deq_demonstrator.data_models import Device, Attribute
+from deq_demonstrator.settings import settings
 import json
 
 
@@ -93,6 +89,7 @@ class ModelicaAgent(Device):
             is_array=True
         )
 
+        self.stop_event = kwargs.get('stop_event', None)
         self.current_time = time.perf_counter()
 
     def get_input_dict_from_fiware(self):
@@ -119,7 +116,15 @@ class ModelicaAgent(Device):
         self.do_step()
 
     def run(self):
-        self.mqtt_client.loop_forever()
+        if self.stop_event is not None:
+            self.mqtt_client.loop_start()
+            while not self.stop_event.is_set():
+                time.sleep(1)
+            self.mqtt_client.loop_stop()
+
+        else:
+            self.mqtt_client.loop_forever()
+        #self.mqtt_client.loop_forever()
 
     def _shift_values(self, values, value):
         values[:-1] = values[1:]
