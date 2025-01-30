@@ -1,9 +1,15 @@
+import copy
 import time
 
 import paho.mqtt.client as mqtt
 from typing_extensions import override
+from filip.models.ngsi_v2.context import NamedContextAttribute
+from requests.exceptions import HTTPError
+from deq_demonstrator.utils import json_schema2context_entity
+from deq_demonstrator.config import ROOT_DIR
+import json
 
-from local_energy_market.classes import Coordinator, Offer, BlockBid
+from local_energy_market.classes import Coordinator, Offer, BlockBid, BidFragment
 from deq_demonstrator.data_models import Device
 from deq_demonstrator.settings import settings
 
@@ -22,34 +28,128 @@ class CoordinatorFiware(Coordinator, Device):
 
         self.stop_event = kwargs.get("stop_event", None)
 
+        schema_path = ROOT_DIR / 'deq_demonstrator' / 'data_models' / \
+                      'schema' / 'Offer.json'
+        with open(schema_path) as f:
+            self.offer_data_model = json.load(f)
+
+        schema_path = ROOT_DIR / 'deq_demonstrator' / 'data_models' / \
+                      'schema' / 'Trade.json'
+        with open(schema_path) as f:
+            self.trade_data_model = json.load(f)
+
+
     # Override the methods for sending and receiving data in order to use FIWARE
 
     @override
     def collect_bids(self) -> list[BlockBid]:
-        agents = self.cb_client.get_entity_list(type_pattern="Building")
+        bid_entities = self.cb_client.get_entity_list(type_pattern="Bid")
         bids = []
-        for agent in agents:
-            agent_attributes = self.cb_client.get_entity_attributes(entity_id=agent.id)
-            bid = BlockBid(agent_id=agent.id)
-            bid.set_prices(agent_attributes["prices"])
-            bid.set_quantities(agent_attributes["quantities"])
-            bid.mean_price = agent_attributes["meanPrice"]
-            bid.total_quantity = agent_attributes["totalQuantity"]
-            bid.buying = agent_attributes["buying"]
-            bid.selling = agent_attributes["selling"]
-            bid.flex_energy = agent_attributes["flexEnergy"]
+        for bid_entity in bid_entities:
+            bid_attrs = self.cb_client.get_entity_attributes(entity_id=bid_entity.id)
+            bid = BlockBid(agent_id=bid_entity.id)
+            prices = bid_attrs["prices"].value
+            quantities = bid_attrs["quantities"].value
+            bid.buying = bid_attrs["buying"].value
+            bid.selling = bid_attrs["selling"].value
+            bid.flex_energy = bid_attrs["flexEnergy"].value
+
+            for price, quantity in zip(prices, quantities):
+                bid_fragment = BidFragment(price=price, quantity=quantity, buying=bid.buying, selling=bid.selling)
+                bid.add_bid_fragment(bid_fragment)
             bids.append(bid)
         return bids
 
     @override
     def publish_offers_and_receive_counteroffers(self, offers: list[Offer]) -> list[Offer]:
         # Publish the offers to the market and receive the counteroffers
+        self.publish_offers(offers)
         return offers
+
+    def publish_offers(self, offers: list[Offer]) -> None:
+        # Publish the offers to the market
+
+
+        for offer in offers:
+
+            try:
+                self.cb_client.get_entity(entity_id=f"Offer:DEQ:MVP:C:{offer.receiving_agent_id}")
+            except HTTPError as err:
+                if err.response.status_code == 404:
+                    entity = json_schema2context_entity(json_schema_dict=copy.deepcopy(self.offer_data_model),
+                                                        entity_id=f"Offer:DEQ:MVP:C:{offer.receiving_agent_id}",
+                                                        entity_type="Offer")
+                    self.cb_client.post_entity(entity)
+
+            offer_attributes = {
+                "offeringAgentID": offer.offering_agent_id,
+                "receivingAgentID": offer.receiving_agent_id,
+                "prices": offer.get_prices(),
+                "quantities": offer.get_quantities(),
+                "buying": offer.buying,
+                "selling": offer.selling
+            }
+
+            for key, value in offer_attributes.items():
+                if isinstance(value, list):
+                    attr_type = "Array"
+                elif isinstance(value, bool):
+                    attr_type = "Boolean"
+                elif isinstance(value, int) or isinstance(value, float):
+                    attr_type = "Number"
+                else:
+                    attr_type = "String"
+
+                attribute = NamedContextAttribute(
+                    name=key,
+                    type=attr_type,
+                    value=value
+                )
+                self.cb_client.update_entity_attribute(
+                    entity_id=f"Offer:DEQ:MVP:C:{offer.receiving_agent_id}",
+                    attr=attribute
+                )
 
     @override
     def publish_trades(self) -> None:
         # Publish the trades to the market
-        pass
+        for trade in self.trades:
+
+            try:
+                self.cb_client.get_entity(entity_id=f"Trade:DEQ:MVP:{trade.seller}:{trade.buyer}")
+            except HTTPError as err:
+                if err.response.status_code == 404:
+                    entity = json_schema2context_entity(json_schema_dict=copy.deepcopy(self.trade_data_model),
+                                                        entity_id=f"Trade:DEQ:MVP:{trade.seller}:{trade.buyer}",
+                                                        entity_type="Trade")
+                    self.cb_client.post_entity(entity)
+
+            trade_attributes = {
+                "buyer": trade.buyer,
+                "seller": trade.seller,
+                "prices": trade.prices,
+                "quantities": trade.quantities
+            }
+
+            for key, value in trade_attributes.items():
+                if isinstance(value, list):
+                    attr_type = "Array"
+                elif isinstance(value, bool):
+                    attr_type = "Boolean"
+                elif isinstance(value, int) or isinstance(value, float):
+                    attr_type = "Number"
+                else:
+                    attr_type = "String"
+
+                attribute = NamedContextAttribute(
+                    name=key,
+                    type=attr_type,
+                    value=value
+                )
+                self.cb_client.update_entity_attribute(
+                    entity_id=f"Trade:DEQ:MVP:{trade.seller}:{trade.buyer}",
+                    attr=attribute
+                )
 
     def on_connect(self, client, userdata, flags, rc) -> None:
         print(f"Connected with result code {rc}")
