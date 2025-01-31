@@ -1,5 +1,5 @@
 import pytest
-from deq_demonstrator.market.building import BuildingFiware
+from deq_demonstrator.market.building_fiware import BuildingFiware
 from tests.input_data import nodes_basic
 from deq_demonstrator.config import ROOT_DIR
 import copy

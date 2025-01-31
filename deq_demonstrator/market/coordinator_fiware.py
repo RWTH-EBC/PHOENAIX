@@ -151,6 +151,12 @@ class CoordinatorFiware(Coordinator, Device):
                     attr=attribute
                 )
 
+    def clear_fiware_for_next_round(self):
+        # Clear the FIWARE context broker for the next step
+        self.cb_client.delete_entities(type_pattern="Bid")
+        self.cb_client.delete_entities(type_pattern="Offer")
+        self.cb_client.delete_entities(type_pattern="Trade")
+
     def on_connect(self, client, userdata, flags, rc) -> None:
         print(f"Connected with result code {rc}")
         client.subscribe(self.topic)

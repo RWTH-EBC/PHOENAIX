@@ -2,7 +2,7 @@ import pytest
 from unittest.mock import patch
 import json
 import copy
-from deq_demonstrator.market.building import BuildingFiware
+from deq_demonstrator.market.building_fiware import BuildingFiware
 from local_energy_market.classes import BlockBid, BidFragment, Offer
 from tests.input_data import nodes_basic
 from deq_demonstrator.config import ROOT_DIR

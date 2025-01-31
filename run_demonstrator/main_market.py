@@ -5,18 +5,23 @@ from pathlib import Path
 import pickle
 import json
 
-from deq_demonstrator.market.coordinator import CoordinatorFiware
-from deq_demonstrator.market.building import BuildingFiware
+from deq_demonstrator.market.coordinator_fiware import CoordinatorFiware
+from deq_demonstrator.market.building_fiware import BuildingFiware
 
 from deq_demonstrator.utils.fiware_utils import clean_up
 from deq_demonstrator.config import ROOT_DIR
 
 def run_coordinator(stop_event):
+    schema_path = ROOT_DIR / 'deq_demonstrator' / 'data_models' / \
+                  'schema' / 'Coordinator.json'
+    with open(schema_path) as f:
+        data_model = json.load(f)
+
     coordinator = CoordinatorFiware(
-        result_handler=None,
         entity_id="Coordinator:DEQ:MVP:000",
         entity_type="Coordinator",
         building_ix=0,
+        data_model=copy.deepcopy(data_model),
         stop_event=stop_event
     )
     coordinator.run()
@@ -35,7 +40,6 @@ def run_buildings(stop_event, building_ix, nodes):
         building_ix=building_ix,
         stop_event=stop_event,
         data_model=copy.deepcopy(data_model),
-        agent_id = building_ix
     )
     building.run()
 

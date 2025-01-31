@@ -23,7 +23,7 @@ class MarketAgentFiware(MarketAgent, Device):
         self.mqtt_client.on_message = self.on_message
         self.mqtt_client.connect(host=settings.MQTT_HOST,
                                  port=settings.MQTT_PORT)
-        self.topic = f"/agent_{agent_id}"
+        self.topic = "agent/#"
 
         self.stop_event = kwargs.get("stop_event", None)
 
@@ -181,7 +181,10 @@ class MarketAgentFiware(MarketAgent, Device):
         print(f"Subscribed to topic {self.topic}")
 
     def on_message(self, client, userdata, message) -> None:
-        print(f"Received message '{message.payload.decode()}' on topic '{message.topic}'")
+        if message.topic == "agent/submit_bid":
+            print(f"Agent {self.agent_id}: Received message to submit bid")
+            self.create_bid(self.building.flexibility)
+            self.submit_bid()
 
     def run(self):
         if self.stop_event is not None:

@@ -1,6 +1,6 @@
 import pytest
 import json
-from deq_demonstrator.market.coordinator import CoordinatorFiware
+from deq_demonstrator.market.coordinator_fiware import CoordinatorFiware
 from deq_demonstrator.config import ROOT_DIR
 from deq_demonstrator.utils.fiware_utils import clean_up
 from local_energy_market.classes import Offer, Trade
@@ -30,7 +30,7 @@ def coordinator():
     return CoordinatorFiware(result_handler=None,
         entity_id="Coordinator:DEQ:MVP:000",
         entity_type="Coordinator",
-        building_ix=0,
+        building_ix="C",
         data_model=data_model
     )
 
