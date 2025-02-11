@@ -17,6 +17,7 @@ from deq_demonstrator.settings import settings
 class CoordinatorFiware(Coordinator, Device):
     def __init__(self, *args, **kwargs):
         Coordinator.__init__(self,*args, **kwargs)
+        Coordinator.__init__(self)
         Device.__init__(self,*args, **kwargs)
 
         self.mqtt_client = mqtt.Client()

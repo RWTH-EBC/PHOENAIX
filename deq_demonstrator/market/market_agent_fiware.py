@@ -15,7 +15,7 @@ from deq_demonstrator.settings import settings
 
 class MarketAgentFiware(MarketAgent, Device):
     def __init__(self, agent_id: int, building: "Building", *args, **kwargs):
-        MarketAgent.__init__(self, agent_id=agent_id, building=building, *args, **kwargs)
+        MarketAgent.__init__(self, agent_id=agent_id, building=building)
         Device.__init__(self, *args, **kwargs)
 
         self.mqtt_client = mqtt.Client()
