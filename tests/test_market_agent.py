@@ -63,6 +63,23 @@ def test_submit_bid(market_agent, cb_client):
     assert bid_entity["buying"].value == True
     assert bid_entity["selling"].value == False
 
+    bid_fragments = [BidFragment(price=0.2, quantity=2, buying=False, selling=True),
+                     BidFragment(price=0.3, quantity=3, buying=False, selling=True),
+                     BidFragment(price=0.4, quantity=4, buying=False, selling=True)]
+
+    bid = BlockBid(agent_id=0)
+    for fragment in bid_fragments:
+        bid.add_bid_fragment(fragment)
+    bid.set_flex_energy(0.4)
+    market_agent.bid = bid
+    market_agent.submit_bid()
+    assert market_agent is not None
+    bid_entity = cb_client.get_entity_attributes(entity_id="Bid:DEQ:MVP:0")
+    assert bid_entity["prices"].value == [0.2, 0.3, 0.4]
+    assert bid_entity["quantities"].value == [2, 3, 4]
+    assert bid_entity["buying"].value == False
+    assert bid_entity["selling"].value == True
+
 def test_receive_offer(market_agent, cb_client):
     data = {
         "id": "Offer:DEQ:MVP:C:0",
@@ -77,6 +94,7 @@ def test_receive_offer(market_agent, cb_client):
     bid = ContextEntity(**data)
     cb_client.post_entity(bid)
     market_agent.receive_offer()
+    offer_entities = cb_client.get_entity_list(type_pattern="Offer")
     assert market_agent.offer is not None
     assert market_agent.offer.offering_agent_id == 1
     assert market_agent.offer.receiving_agent_id == 0
@@ -84,6 +102,7 @@ def test_receive_offer(market_agent, cb_client):
     assert market_agent.offer.get_quantities() == [1.1, 2.2, 3.3]
     assert market_agent.offer.buying == True
     assert market_agent.offer.selling == False
+    assert len(offer_entities) == 0
 
 def test_publish_counteroffer(market_agent):
     clean_up()

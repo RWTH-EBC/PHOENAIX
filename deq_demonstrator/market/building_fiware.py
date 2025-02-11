@@ -19,7 +19,7 @@ class BuildingFiware(Building, Device):
         self.mqtt_client.on_message = self.on_message
         self.mqtt_client.connect(host=settings.MQTT_HOST,
                                  port=settings.MQTT_PORT)
-        self.topic = f"building/#"
+        self.topic = f"/building/#"
         self.stop_event = kwargs.get("stop_event", None)
 
 
@@ -34,12 +34,22 @@ class BuildingFiware(Building, Device):
         print(f"Subscribed to topic {self.topic}")
 
     def on_message(self, client, userdata, message) -> None:
-        if message.topic == "building/calculate_forecast":
+        if message.topic == "/building/calculate_forecast":
             print(f"Building {self.building_id}: Received message to calculate forecast")
             self.calculate_forecast()
-        elif message.topic == "building/optimize":
+            print(f"Building {self.building_id}: Forecast calculated")
+            client.publish(topic="/notification/forecast", payload=f"{self.building_id}")
+        elif message.topic == "/building/optimize":
             print(f"Building {self.building_id}: Received message to optimize")
             self.run_optimization()
+            print(f"Building {self.building_id}: Optimization done")
+            client.publish(topic="/notification/optimize", payload=f"{self.building_id}")
+        elif message.topic == "/building/prepare":
+            print(f"Building {self.building_id}: Received message to prepare")
+            self.update_and_prepare_for_next_opti_step()
+            print(f"Building {self.building_id}: Building prepared")
+            client.publish(topic="/notification/prepared", payload=f"{self.building_id}")
+
 
     def run(self):
         self.mqtt_client.loop_start()

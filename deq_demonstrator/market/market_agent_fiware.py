@@ -23,7 +23,7 @@ class MarketAgentFiware(MarketAgent, Device):
         self.mqtt_client.on_message = self.on_message
         self.mqtt_client.connect(host=settings.MQTT_HOST,
                                  port=settings.MQTT_PORT)
-        self.topic = "agent/#"
+        self.topic = "/agent/#"
 
         self.stop_event = kwargs.get("stop_event", None)
 
@@ -37,14 +37,10 @@ class MarketAgentFiware(MarketAgent, Device):
                       'schema' / 'Bid.json'
         with open(schema_path) as f:
             data_model = json.load(f)
-        try:
-            self.cb_client.get_entity(entity_id=f"Bid:DEQ:MVP:{self.agent_id}")
-        except HTTPError as err:
-            if err.response.status_code == 404:
-                entity = json_schema2context_entity(json_schema_dict=data_model,
-                                                    entity_id=f"Bid:DEQ:MVP:{self.agent_id}",
-                                                    entity_type="Bid")
-                self.cb_client.post_entity(entity)
+        self.bid_entity = json_schema2context_entity(json_schema_dict=data_model,
+                                                     entity_id=f"Bid:DEQ:MVP:{self.agent_id}",
+                                                     entity_type="Bid")
+
 
         schema_path = ROOT_DIR / 'deq_demonstrator' / 'data_models' / \
                       'schema' / 'Offer.json'
@@ -55,19 +51,12 @@ class MarketAgentFiware(MarketAgent, Device):
 
     @override
     def submit_bid(self):
-        '''
-        self.attributes["prices"].value = self.bid.get_prices()
-        self.attributes["quantities"].value = self.bid.get_quantities()
-        self.attributes["meanPrice"].value = self.bid.mean_price
-        self.attributes["totalQuantity"].value = self.bid.total_quantity
-        self.attributes["buying"].value = self.bid.buying
-        self.attributes["selling"].value = self.bid.selling
-        self.attributes["flexEnergy"].value = self.bid.flex_energy
 
-        for attr in self.attributes.values():
-            attr.push()
-
-        '''
+        try:
+            self.cb_client.get_entity(entity_id=f"Bid:DEQ:MVP:{self.agent_id}")
+        except HTTPError as err:
+            if err.response.status_code == 404:
+                self.cb_client.post_entity(self.bid_entity)
 
         bid_attributes = {
             "prices": self.bid.get_prices(),
@@ -114,6 +103,7 @@ class MarketAgentFiware(MarketAgent, Device):
             buying=offer_entities[0].buying.value,
             selling=offer_entities[0].selling.value
         )
+        self.cb_client.delete_entity(entity_id=offer_entities[0].id, entity_type="Offer")
 
     @override
     def publish_counteroffer(self) -> None:
@@ -154,6 +144,7 @@ class MarketAgentFiware(MarketAgent, Device):
                 entity_id=f"Offer:DEQ:MVP:C:{self.counteroffer.offering_agent_id}:{self.counteroffer.receiving_agent_id}",
                 attr=attribute
             )
+        self.offer = None
 
     @override
     def receive_trade(self, trade: Trade=None) -> None:
@@ -181,10 +172,27 @@ class MarketAgentFiware(MarketAgent, Device):
         print(f"Subscribed to topic {self.topic}")
 
     def on_message(self, client, userdata, message) -> None:
-        if message.topic == "agent/submit_bid":
+        if message.topic == "/agent/submit_bid":
             print(f"Agent {self.agent_id}: Received message to submit bid")
             self.create_bid(self.building.flexibility)
             self.submit_bid()
+            self.mqtt_client.publish(topic="/notification/bid", payload=f"{self.agent_id}")
+        elif message.topic == "/agent/counteroffer":
+            print(f"Agent {self.agent_id}: Received message to counteroffer")
+            self.receive_offer()
+            if self.offer is not None:
+                self.make_counteroffer()
+                self.publish_counteroffer()
+            self.mqtt_client.publish(f"/notification/published_offer/{self.agent_id}", qos=1)
+        elif message.topic == "/agent/receive_trade":
+            print(f"Agent {self.agent_id}: Received message to receive trade")
+            self.receive_trade()
+            self.mqtt_client.publish(topic="/notification/trade", payload=f"{self.agent_id}")
+        elif message.topic == "/agent/grid":
+            print(f"Agent {self.agent_id}: Received message to trade with grid")
+            self.trade_with_grid()
+            self.mqtt_client.publish(topic="/notification/grid", payload=f"{self.agent_id}")
+
 
     def run(self):
         if self.stop_event is not None:

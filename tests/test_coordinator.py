@@ -9,6 +9,8 @@ from filip.clients.ngsi_v2.cb import ContextBrokerClient
 from deq_demonstrator.settings import settings
 from filip.models.ngsi_v2.context import NamedContextAttribute, ContextEntity
 import numpy as np
+import paho.mqtt.client as mqtt
+import threading
 
 @pytest.fixture(autouse=True)
 def clean(request):
@@ -21,18 +23,41 @@ def cb_client():
     return ContextBrokerClient(url=settings.CB_URL, fiware_header=settings.fiware_header, session=s)
 
 @pytest.fixture
+def mock_agent_mqtt_client():
+    class MockAgentMqttClient:
+        def __init__(self):
+            self.mqtt_client = mqtt.Client()
+            self.mqtt_client.on_connect = self.on_connect
+            self.mqtt_client.on_message = self.on_message
+            self.mqtt_client.connect(host=settings.MQTT_HOST,
+                                     port=settings.MQTT_PORT)
+            self.topic = "/agent/#"
+            self.mqtt_client.loop_start()
+        def on_connect(self, client, userdata, flags, rc):
+            client.subscribe(self.topic)
+        def on_message(self, client, userdata, message):
+            if message.topic == "/agent/counteroffer":
+                self.mqtt_client.publish("/coordinator/published_offer/1")
+                self.mqtt_client.publish("/coordinator/published_offer/2")
+    return MockAgentMqttClient()
+
+@pytest.fixture
 def coordinator():
     schema_path = ROOT_DIR / 'deq_demonstrator' / 'data_models' / \
                   'schema' / 'Coordinator.json'
     with open(schema_path) as f:
         data_model = json.load(f)
 
-    return CoordinatorFiware(result_handler=None,
+    coordinator = CoordinatorFiware(result_handler=None,
         entity_id="Coordinator:DEQ:MVP:000",
         entity_type="Coordinator",
         building_ix="C",
-        data_model=data_model
+        data_model=data_model,
+        stop_event=threading.Event()
     )
+
+    coordinator.run()
+    return coordinator
 
 def test_init(coordinator):
     assert coordinator is not None
@@ -51,7 +76,8 @@ def test_collect_bids(cb_client, coordinator):
     }
     bid = ContextEntity(**data)
     cb_client.post_entity(bid)
-    bids = coordinator.collect_bids()
+    coordinator.collect_bids()
+    bids = coordinator.submitted_bids
     assert bids[0].agent_id == "Bid:DEQ:MVP:001"
     assert bids[0].get_prices() == [0.1, 0.2, 0.3]
     assert bids[0].get_quantities() == [1.1, 2.2, 3.3]
@@ -111,4 +137,17 @@ def test_publish_trades(coordinator, cb_client):
     assert entity_trade2["quantities"].value == [1.1, 2.2, 3.3]
     assert entity_trade2["buyer"].value == 3
     assert entity_trade2["seller"].value == 4
+
+def test_publish_offers_and_receive_counteroffers(coordinator, cb_client, mock_agent_mqtt_client):
+    offer1 = Offer(offering_agent_id=3, receiving_agent_id=1, quantities=[1.1, 2.2, 3.3], prices=[0.1, 0.2, 0.3],
+                   buying=True, selling=False)
+    offer2 = Offer(offering_agent_id=4, receiving_agent_id=2, quantities=[1.1, 2.2, 3.3], prices=[0.1, 0.2, 0.3],
+                   buying=False, selling=True)
+    offers = [offer1, offer2]
+
+    returned_offers = coordinator.publish_offers_and_receive_counteroffers(offers)
+    mock_agent_mqtt_client.mqtt_client.loop_stop()
+    coordinator.stop_event.set()
+
+    assert len(returned_offers) == 2
 
