@@ -1,18 +1,20 @@
 from typing_extensions import override
 import paho.mqtt.client as mqtt
 import time
+from datetime import datetime
 
-from local_energy_market.classes import Building
+from local_energy_market.classes import Building, ResultHandler
 from deq_demonstrator.market.market_agent_fiware import MarketAgentFiware
 from deq_demonstrator.data_models import Device
 from deq_demonstrator.settings import settings
 
 class BuildingFiware(Building, Device):
     def __init__(self, building_id: int, nodes: dict, *args, **kwargs):
-        Building.__init__(self, building_id=building_id, nodes=nodes)
+        result_handler = ResultHandler(file_name=f"{datetime.now().strftime('%m-%d_%H-%M-%S')}_building_{building_id}")
+        Building.__init__(self, building_id=building_id, nodes=nodes, result_handler=result_handler)
         Device.__init__(self,*args, **kwargs)
 
-        self.market_agent = MarketAgentFiware(agent_id=building_id, building=self, *args, **kwargs)
+        self.market_agent = MarketAgentFiware(agent_id=building_id, building=self, result_handler=result_handler, *args, **kwargs)
 
         self.mqtt_client = mqtt.Client()
         self.mqtt_client.on_connect = self.on_connect

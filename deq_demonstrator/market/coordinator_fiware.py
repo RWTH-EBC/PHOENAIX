@@ -1,6 +1,7 @@
 import copy
 import threading
 import time
+from datetime import datetime
 
 import paho.mqtt.client as mqtt
 from typing_extensions import override
@@ -10,14 +11,15 @@ from deq_demonstrator.utils import json_schema2context_entity
 from deq_demonstrator.config import ROOT_DIR
 import json
 
-from local_energy_market.classes import Coordinator, Offer, BlockBid, BidFragment
+from local_energy_market.classes import Coordinator, Offer, BlockBid, BidFragment, ResultHandler
 from deq_demonstrator.data_models import Device
 from deq_demonstrator.settings import settings
 
 
 class CoordinatorFiware(Coordinator, Device):
     def __init__(self, building_ids, *args, **kwargs):
-        Coordinator.__init__(self)
+        result_handler = ResultHandler(file_name=f"{datetime.now().strftime('%m-%d_%H-%M-%S')}_coordinator")
+        Coordinator.__init__(self, result_handler=result_handler)
         Device.__init__(self,*args, **kwargs)
 
         self.mqtt_client = mqtt.Client()
@@ -79,6 +81,7 @@ class CoordinatorFiware(Coordinator, Device):
                 bid.add_bid_fragment(bid_fragment)
             bids.append(bid)
         self.submitted_bids = bids
+        self.result_handler.save_bids(id_="c", data=bids)
 
     def collect_offers(self, offer: Offer=None) -> list[Offer]:
         offer_entities = self.cb_client.get_entity_list(type_pattern="Offer")
