@@ -174,7 +174,6 @@ class MarketAgentFiware(MarketAgent, Device):
     def on_message(self, client, userdata, message) -> None:
         if message.topic == "/agent/submit_bid":
             print(f"Agent {self.agent_id}: Received message to submit bid")
-            self.create_bid(self.building.flexibility)
             self.submit_bid()
             self.mqtt_client.publish(topic="/notification/bid", payload=f"{self.agent_id}")
         elif message.topic == "/agent/counteroffer":

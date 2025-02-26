@@ -44,7 +44,8 @@ class BuildingFiware(Building, Device):
         elif message.topic == "/building/optimize":
             print(f"Building {self.building_id}: Received message to optimize")
             self.run_optimization()
-            print(f"Building {self.building_id}: Optimization done")
+            self.trigger_bid_creation()
+            print(f"Building {self.building_id}: Optimization done and bid created.")
             client.publish(topic="/notification/optimize", payload=f"{self.building_id}")
         elif message.topic == "/building/prepare":
             print(f"Building {self.building_id}: Received message to prepare")
