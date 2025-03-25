@@ -2,6 +2,8 @@ import paho.mqtt.client as mqtt
 import time
 from deq_demonstrator.settings import settings
 import threading
+import pickle
+from pathlib import Path
 
 class MarketController:
 
@@ -33,7 +35,9 @@ class MarketController:
         self.grid_events = {str(id_): threading.Event() for id_ in ids}
         self.building_prepared_events = {str(id_): threading.Event() for id_ in ids}
 
-        self.time_per_round = 2 # seconds
+        self.time_per_round = 0 # seconds
+        self.whole_round_times = []
+        self.negotiation_times = []
 
 
     def run_market(self):
@@ -41,7 +45,7 @@ class MarketController:
         self.market_running_event.wait()
 
         while not self.stop_event.is_set() and self.market_running_event.is_set():
-            start_time = time.time()
+            start_time = time.perf_counter()
             print("Starting market cycle.")
             print("Waiting for forecast calculation.")
             self.mqtt_client.publish(topic="/building/calculate_forecast")
@@ -58,10 +62,13 @@ class MarketController:
             #self.wait_for_events(events=self.bid_events, timeout=None)
             #self.reset_events(events=self.bid_events)
 
+            nego_start_time = time.perf_counter()
             print("Optimization done. Waiting for negotiation.")
             self.mqtt_client.publish("/coordinator/negotiation")
             self.negotiation_event.wait(timeout=None)
             self.negotiation_event.clear()
+            nego_delta_time = time.perf_counter() - nego_start_time
+            self.negotiation_times.append(nego_delta_time)
 
             print("Negotiation done. Waiting for agents to trade with grid.")
             self.mqtt_client.publish("/agent/grid")
@@ -73,13 +80,22 @@ class MarketController:
             self.wait_for_events(events=self.building_prepared_events, timeout=None)
             self.reset_events(events=self.building_prepared_events)
 
-            delta_time = time.time() - start_time
+            delta_time = time.perf_counter() - start_time
+            self.whole_round_times.append(delta_time)
             wait_time = self.time_per_round - delta_time
             if wait_time > 0:
                 print(f"Market cycle done in {delta_time} seconds. Waiting for {wait_time} seconds.")
                 time.sleep(wait_time)
             else:
                 print(f"Market cycle done in {delta_time} seconds. No waiting time.")
+
+            if len(self.whole_round_times) > 30*24/3:
+                times_dict = {"whole_round_times": self.whole_round_times, "negotiation_times": self.negotiation_times}
+                file = Path(__file__).parent.joinpath(f"times_{time.time()}.p")
+                with open(file, "wb") as f:
+                    pickle.dump(times_dict, f)
+                self.stop_event.set()
+
 
         print("Market stopped.")
 
