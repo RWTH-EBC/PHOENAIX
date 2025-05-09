@@ -1,7 +1,6 @@
 import copy
 import threading
 import time
-from pathlib import Path
 import pickle
 import json
 
@@ -12,14 +11,19 @@ from deq_demonstrator.market.market_controller import MarketController
 from deq_demonstrator.utils.fiware_utils import clean_up
 from deq_demonstrator.config import ROOT_DIR
 
+
 def run_coordinator(building_ids, stop_event):
-    schema_path = ROOT_DIR / 'deq_demonstrator' / 'data_models' / \
-                  'schema' / 'Coordinator.json'
+    """
+    Set up the coordinator.
+    """
+    # load the data model schema for the coordinator
+    schema_path = ROOT_DIR / 'deq_demonstrator' / 'data_models' / 'schema' / 'Coordinator.json'
     with open(schema_path) as f:
         data_model = json.load(f)
 
+    # create the coordinator
     coordinator = CoordinatorFiware(
-        building_ids=building_ids,
+        building_ids=building_ids, # list of all building ids required for communication
         entity_id="Coordinator:DEQ:MVP:000",
         entity_type="Coordinator",
         building_ix=0,
@@ -28,12 +32,17 @@ def run_coordinator(building_ids, stop_event):
     )
     coordinator.run()
 
+
 def run_buildings(stop_event, building_ix, nodes):
-    schema_path = ROOT_DIR / 'deq_demonstrator' / 'data_models' / \
-                  'schema' / 'MarketAgent.json'
+    """
+    Set up the building.
+    """
+    # load the data model schema for the building
+    schema_path = ROOT_DIR / 'deq_demonstrator' / 'data_models' / 'schema' / 'MarketAgent.json'
     with open(schema_path) as f:
         data_model = json.load(f)
 
+    # create the building
     building = BuildingFiware(
         building_id=building_ix,
         nodes=nodes,
@@ -45,44 +54,68 @@ def run_buildings(stop_event, building_ix, nodes):
     )
     building.run()
 
+
 def run_controller(building_ids, stop_event):
-    controller = MarketController(ids=building_ids, stop_event=stop_event)
+    """
+    Set up the market controller.
+    """
+    # create the market controller
+    controller = MarketController(building_ids=building_ids, stop_event=stop_event)
     controller.run()
 
-def main():
+
+def set_up(stop_event):
+    """
+    Set up the environment with all the necessary components.
+    Each component is run in a separate thread. The threads are started and returned.
+    """
+    # clear the FIWARE context broker and quantumleap
     clean_up()
 
-    stop_event = threading.Event()
-    building_ids = list(range(6))
+    building_ids = list(range(9))
 
+    # list with all threads
     threads = []
+
+    # set up the coordinator
     t = threading.Thread(target=run_coordinator, args=[building_ids, stop_event], name="coordinator")
     threads.append(t)
     t.start()
-
     print("Started coordinator")
 
-    input_data_path = Path(__file__).parents[1] / 'data' / '01_input'
-
-    with open(input_data_path / '06_building_nodes' / 'nodes_test_scenario_1.p', 'rb') as f:
+    # load the nodes with the building data
+    with open(ROOT_DIR / 'data' / '01_input' / '06_building_nodes' / 'nodes_CISBAT_144.p', 'rb') as f:
         nodes = pickle.load(f)
 
-
+    # set up the buildings
     for building_ix in building_ids:
         t = threading.Thread(target=run_buildings, args=[stop_event, building_ix, nodes[building_ix]],
                              name=f"building_{building_ix}")
         threads.append(t)
         t.start()
-
+        time.sleep(5)
     print("Started buildings")
 
+    # set up the market controller
     t = threading.Thread(target=run_controller, args=[building_ids, stop_event], name="controller")
     threads.append(t)
     t.start()
-
     print("Started controller")
 
-    while True:
+    return threads
+
+
+def main():
+    """
+    Main function to set up and run the market.
+    """
+    # create a stop event to signal all threads to stop
+    stop_event = threading.Event()
+    # set up all components
+    threads = set_up(stop_event=stop_event)
+
+    # loop to keep the main thread alive, stopping all threads when a KeyboardInterrupt is received or stop_event is set
+    while not stop_event.is_set():
         try:
             time.sleep(1)
         except KeyboardInterrupt:
