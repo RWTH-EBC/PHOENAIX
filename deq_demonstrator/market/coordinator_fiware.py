@@ -18,52 +18,54 @@ from deq_demonstrator.settings import settings
 
 class CoordinatorFiware(Coordinator, Device):
     def __init__(self, building_ids, *args, **kwargs):
+        self.stop_event = kwargs.get("stop_event", None)
+
         result_handler = ResultHandler(file_name=f"{datetime.now().strftime('%m-%d_%H-%M-%S')}_coordinator")
         Coordinator.__init__(self, result_handler=result_handler)
-        Device.__init__(self,*args, **kwargs)
+        Device.__init__(self, *args, **kwargs)
 
+        # Initialize the MQTT client
         self.mqtt_client = mqtt.Client()
+        self.topic = "/coordinator/#"
         self.mqtt_client.on_connect = self.on_connect
         self.mqtt_client.on_message = self.on_message
         self.mqtt_client.connect(host=settings.MQTT_HOST,
                                  port=settings.MQTT_PORT)
-        self.topic = "/coordinator/#"
-        self.topic_notification_handler = "/notification/#"
 
+        # Initialize the MQTT client for notification handling
         self.mqtt_client_notification_handler = mqtt.Client()
+        self.topic_notification_handler = "/notification/#"
         self.mqtt_client_notification_handler.on_connect = self.on_connect_notification_handler
         self.mqtt_client_notification_handler.on_message = self.on_message_notification_handler
         self.mqtt_client_notification_handler.connect(host=settings.MQTT_HOST,
                                                       port=settings.MQTT_PORT)
 
-
-        self.stop_event = kwargs.get("stop_event", None)
-        self.agent_events = {}
-
-        schema_path = ROOT_DIR / 'deq_demonstrator' / 'data_models' / \
-                      'schema' / 'Offer.json'
+        schema_path = ROOT_DIR / 'deq_demonstrator' / 'data_models' / 'schema' / 'Offer.json'
         with open(schema_path) as f:
             self.offer_data_model = json.load(f)
 
-        schema_path = ROOT_DIR / 'deq_demonstrator' / 'data_models' / \
-                      'schema' / 'Trade.json'
+        schema_path = ROOT_DIR / 'deq_demonstrator' / 'data_models' / 'schema' / 'Trade.json'
         with open(schema_path) as f:
             self.trade_data_model = json.load(f)
 
         self.building_ids = building_ids
         self.bid_events = {str(building_id): threading.Event() for building_id in building_ids}
         self.trade_events = {str(building_id): threading.Event() for building_id in building_ids}
-
+        self.agent_events = {}
 
     # Override the methods for sending and receiving data in order to use FIWARE
-
     @override
     def collect_bids(self) -> None:
+        """
+        Request the agents to send their bids and collect them.
+        """
         print("Collecting bids")
+        # Send notification to the agents to send their bids and wait for them to sent confirmations
         info = self.mqtt_client_notification_handler.publish("/agent/submit_bid")
-        self.wait_for_events(events=self.bid_events, timeout=None)
-        self.reset_events(events=self.bid_events)
+        wait_for_events(events=self.bid_events, timeout=None)
+        reset_events(events=self.bid_events)
 
+        # Collect the bids from the agents
         bid_entities = self.cb_client.get_entity_list(type_pattern="Bid")
         bids = []
         for bid_entity in bid_entities:
@@ -75,7 +77,7 @@ class CoordinatorFiware(Coordinator, Device):
             bid.buying = bid_attrs["buying"].value
             bid.selling = bid_attrs["selling"].value
             bid.flex_energy = bid_attrs["flexEnergy"].value
-
+            # Create the bids from the BidFragments
             for price, quantity in zip(prices, quantities):
                 bid_fragment = BidFragment(price=price, quantity=quantity, buying=bid.buying, selling=bid.selling)
                 bid.add_bid_fragment(bid_fragment)
@@ -83,7 +85,10 @@ class CoordinatorFiware(Coordinator, Device):
         self.submitted_bids = bids
         self.result_handler.save_bids(id_="c", data=bids)
 
-    def collect_offers(self, offer: Offer=None) -> list[Offer]:
+    def collect_offers(self) -> list[Offer]:
+        """
+        Collect the offers from the agents and return them.
+        """
         offer_entities = self.cb_client.get_entity_list(type_pattern="Offer")
         offers = []
         for offer_entity in offer_entities:
@@ -100,19 +105,27 @@ class CoordinatorFiware(Coordinator, Device):
 
     @override
     def publish_offers_and_receive_counteroffers(self, offers: list[Offer]) -> list[Offer]:
+        """
+        The offers are published and the agents are notified to send their counteroffers. The counteroffers are
+        collected and returned.
+        """
+        # Create events for each agent that receives an offer to wait for their counteroffers
         self.agent_events = {str(offer.receiving_agent_id): threading.Event() for offer in offers}
-        # Publish the offers to the market and receive the counteroffers
+        # Publish the offers to the market and notify the agents to send their counteroffers
         self.publish_offers(offers)
         self.mqtt_client_notification_handler.publish("/agent/counteroffer", payload="all")
-        self.wait_for_events(events=self.agent_events, timeout=None)
+        # Wait for the agents to send their counteroffers
+        wait_for_events(events=self.agent_events, timeout=None)
+        # Collect the counteroffers from the agents
         return self.collect_offers()
 
     def publish_offers(self, offers: list[Offer]) -> None:
-        # Publish the offers to the market
-
+        """
+        Publish the offers to the market.
+        """
 
         for offer in offers:
-
+            # Create a new entity for the offer if it does not exist already
             try:
                 self.cb_client.get_entity(entity_id=f"Offer:DEQ:MVP:C:{offer.receiving_agent_id}")
             except HTTPError as err:
@@ -122,6 +135,7 @@ class CoordinatorFiware(Coordinator, Device):
                                                         entity_type="Offer")
                     self.cb_client.post_entity(entity)
 
+            # Map the entity attributes to the offer attributes
             offer_attributes = {
                 "offeringAgentID": offer.offering_agent_id,
                 "receivingAgentID": offer.receiving_agent_id,
@@ -131,6 +145,7 @@ class CoordinatorFiware(Coordinator, Device):
                 "selling": offer.selling
             }
 
+            # Update the entity attributes
             for key, value in offer_attributes.items():
                 if isinstance(value, list):
                     attr_type = "Array"
@@ -153,9 +168,11 @@ class CoordinatorFiware(Coordinator, Device):
 
     @override
     def publish_trades(self) -> None:
-        # Publish the trades to the market
+        """
+        Publish the trades to the market and notify the agents to receive them.
+        """
         for trade in self.trades:
-
+            # Create a new entity for the trade if it does not exist already
             try:
                 self.cb_client.get_entity(entity_id=f"Trade:DEQ:MVP:{trade.seller}:{trade.buyer}")
             except HTTPError as err:
@@ -165,13 +182,14 @@ class CoordinatorFiware(Coordinator, Device):
                                                         entity_type="Trade")
                     self.cb_client.post_entity(entity)
 
+            # Map the entity attributes to the trade attributes
             trade_attributes = {
                 "buyer": trade.buyer,
                 "seller": trade.seller,
                 "prices": trade.prices,
                 "quantities": trade.quantities
             }
-
+            # Update the entity attributes
             for key, value in trade_attributes.items():
                 if isinstance(value, list):
                     attr_type = "Array"
@@ -192,12 +210,17 @@ class CoordinatorFiware(Coordinator, Device):
                     attr=attribute
                 )
         print("Published trades. Waiting for agents to receive them.")
+
+        # Notify the agents to receive the trades and wait for them to confirm the reception
         self.mqtt_client_notification_handler.publish(topic="/agent/receive_trade")
-        self.wait_for_events(events=self.trade_events, timeout=None)
-        self.reset_events(events=self.trade_events)
+        wait_for_events(events=self.trade_events, timeout=None)
+        reset_events(events=self.trade_events)
 
     @override
     def clear_for_next_round(self) -> None:
+        """
+        Clear the data for the next round of the market.
+        """
         self.trades = []
         self.matches = []
         self.buying_offers = []
@@ -206,27 +229,12 @@ class CoordinatorFiware(Coordinator, Device):
         self.clear_fiware_for_next_round()
 
     def clear_fiware_for_next_round(self):
-        # Clear the FIWARE context broker for the next step
+        """
+        Clear the FIWARE context broker for the next round of the market.
+        """
         self.cb_client.delete_entities(entities=self.cb_client.get_entity_list(type_pattern="Bid"))
         self.cb_client.delete_entities(entities=self.cb_client.get_entity_list(type_pattern="Offer"))
         self.cb_client.delete_entities(entities=self.cb_client.get_entity_list(type_pattern="Trade"))
-
-    def wait_for_events(self, events, timeout):
-        start_time = time.time()
-        if timeout is None:
-            while not all(event.is_set() for event in events.values()):
-                time.sleep(0.1)
-            print("All events set.")
-        else:
-            while time.time() - start_time < timeout:
-                if all(event.is_set() for event in events.values()):
-                    print("All events set.")
-                    break
-                time.sleep(0.1)
-
-    def reset_events(self, events):
-        for event in events.values():
-            event.clear()
 
     def on_connect(self, client, userdata, flags, rc) -> None:
         print(f"Connected with result code {rc}")
@@ -239,41 +247,52 @@ class CoordinatorFiware(Coordinator, Device):
         print(f"Subscribed to topic {self.topic_notification_handler}")
 
     def on_message(self, client, userdata, message) -> None:
-        if message.topic == "/coordinator/collect_bids":
-            print("Received message to collect bids")
-            self.collect_bids()
-        elif message.topic == "/coordinator/negotiation":
-            print("Received message to start negotiation")
-            self.run_negotiation()
-            print("Negotiation done")
-            self.mqtt_client.publish(topic="/notification/negotiation", payload="C")
+        match message.topic:
+            case "/coordinator/collect_bids":
+                print("Received message to collect bids")
+                self.collect_bids()
+            case "/coordinator/negotiation":
+                print("Received message to start negotiation")
+                self.run_negotiation()
+                print("Negotiation done")
+                self.mqtt_client.publish(topic="/notification/negotiation", payload="C", qos=1)
+            case _:
+                print(f"Coordinator received message on unknown topic {message.topic}")
 
     def on_message_notification_handler(self, client, userdata, message) -> None:
-        if "/notification/published_offer" in message.topic:
-            print("Received message that an agent has published an offer")
-            agent = message.topic.split("/")[-1]
-            if agent in self.agent_events:
-                self.agent_events[agent].set()
-        elif message.topic == "/notification/bid":
-            id_ = message.payload.decode()
-            print(f"Received bid notification for agent {id_}")
-            self.bid_events[id_].set() if id_ in self.bid_events else print("Could not set bid event.")
-        elif message.topic == "/notification/trade":
-            id_ = message.payload.decode()
-            print(f"Received trade notification for agent {id_}")
-            self.trade_events[id_].set() if id_ in self.trade_events else print("Could not set trade event.")
+        match message.topic:
+            case topic if "/notification/published_offer" in topic:
+                print("Received message that an agent has published an offer")
+                agent = topic.split("/")[-1]
+                if agent in self.agent_events:
+                    self.agent_events[agent].set()
+            case "/notification/bid":
+                id_ = message.payload.decode()
+                print(f"Received bid notification for agent {id_}")
+                self.bid_events[id_].set() if id_ in self.bid_events else print("Could not set bid event.")
+            case "/notification/trade":
+                id_ = message.payload.decode()
+                print(f"Received trade notification for agent {id_}")
+                self.trade_events[id_].set() if id_ in self.trade_events else print("Could not set trade event.")
+            case _:
+                print(f"Coordinator received unknown notification {message.topic}")
 
     def run_mqtt_client(self):
+        """
+        Run the MQTT client.
+        """
         if self.stop_event is not None:
             self.mqtt_client.loop_start()
             while not self.stop_event.is_set():
                 time.sleep(1)
             self.mqtt_client.loop_stop()
-
         else:
             self.mqtt_client.loop_forever()
 
     def run_mqtt_client_notification_handler(self):
+        """
+        Run the MQTT client for notification handling.
+        """
         if self.stop_event is not None:
             self.mqtt_client_notification_handler.loop_start()
             while not self.stop_event.is_set():
@@ -284,10 +303,31 @@ class CoordinatorFiware(Coordinator, Device):
             self.mqtt_client_notification_handler.loop_forever()
 
     def run(self):
-        threads = []
-        mqtt_client_thread = threading.Thread(target=self.run_mqtt_client)
-        threads.append(mqtt_client_thread)
-        mqtt_client_notification_handler_thread = threading.Thread(target=self.run_mqtt_client_notification_handler)
-        threads.append(mqtt_client_notification_handler_thread)
+        """
+        Create and start the threads for the MQTT client and the notification handler.
+        """
+        threads = [threading.Thread(target=self.run_mqtt_client,
+                                    name="Coordinator MQTT Client"),
+                   threading.Thread(target=self.run_mqtt_client_notification_handler,
+                                    name="Coordinator MQTT Client Notification Handler")]
         for thread in threads:
             thread.start()
+
+
+def wait_for_events(events, timeout):
+    start_time = time.time()
+    if timeout is None:
+        while not all(event.is_set() for event in events.values()):
+            time.sleep(0.1)
+        print("All events set.")
+    else:
+        while time.time() - start_time < timeout:
+            if all(event.is_set() for event in events.values()):
+                print("All events set.")
+                break
+            time.sleep(0.1)
+
+
+def reset_events(events):
+    for event in events.values():
+        event.clear()
