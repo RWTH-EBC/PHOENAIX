@@ -11,6 +11,7 @@ import copy
 from local_energy_market.classes import MarketAgent, BlockBid, Offer, Trade
 from deq_demonstrator.data_models import Device, Attribute
 from deq_demonstrator.settings import settings
+from deq_demonstrator.utils.setup_logger import setup_logger
 
 
 class MarketAgentFiware(MarketAgent, Device):
@@ -20,6 +21,8 @@ class MarketAgentFiware(MarketAgent, Device):
     """
     def __init__(self, agent_id: int, building: "Building", *args, **kwargs):
         self.stop_event = kwargs.get("stop_event", None)
+
+        self.logger = setup_logger(name=f"MarketAgentFiware {agent_id}", cd=None, level="INFO")
 
         MarketAgent.__init__(self, agent_id=agent_id, building=building)
         Device.__init__(self, *args, **kwargs)
@@ -191,9 +194,9 @@ class MarketAgentFiware(MarketAgent, Device):
         self.adjust_bid(trade)
 
     def on_connect(self, client, userdata, flags, rc) -> None:
-        print(f"Connected with result code {rc}")
+        self.logger.info(f"Connected with result code {rc}")
         client.subscribe(self.topic)
-        print(f"Subscribed to topic {self.topic}")
+        self.logger.info(f"Subscribed to topic {self.topic}")
 
     def on_message(self, client, userdata, message) -> None:
         """
@@ -202,26 +205,26 @@ class MarketAgentFiware(MarketAgent, Device):
         """
         match message.topic:
             case "/agent/submit_bid":
-                print(f"Agent {self.agent_id}: Received message to submit bid")
+                self.logger.debug(f"Agent {self.agent_id}: Received message to submit bid")
                 self.submit_bid()
                 self.mqtt_client.publish(topic="/notification/bid", payload=f"{self.agent_id}")
             case "/agent/counteroffer":
-                print(f"Agent {self.agent_id}: Received message to counteroffer")
+                self.logger.debug(f"Agent {self.agent_id}: Received message to counteroffer")
                 self.receive_offer()
                 if self.offer is not None:
                     self.make_counteroffer()
                     self.publish_counteroffer()
                 self.mqtt_client.publish(topic=f"/notification/published_offer/{self.agent_id}", qos=1)
             case "/agent/receive_trade":
-                print(f"Agent {self.agent_id}: Received message to receive trade")
+                self.logger.debug(f"Agent {self.agent_id}: Received message to receive trade")
                 self.receive_trade()
                 self.mqtt_client.publish(topic="/notification/trade", payload=f"{self.agent_id}")
             case "/agent/grid":
-                print(f"Agent {self.agent_id}: Received message to trade with grid")
+                self.logger.debug(f"Agent {self.agent_id}: Received message to trade with grid")
                 self.trade_with_grid()
                 self.mqtt_client.publish(topic="/notification/grid", payload=f"{self.agent_id}")
             case _:
-                print(f"Agent {self.agent_id}: Received message on unknown topic {message.topic}")
+                self.logger.warning(f"Agent {self.agent_id}: Received message on unknown topic {message.topic}")
 
     def run(self):
         if self.stop_event is not None:

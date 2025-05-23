@@ -6,6 +6,7 @@ from local_energy_market.classes import Building, ResultHandler
 from deq_demonstrator.market.market_agent_fiware import MarketAgentFiware
 from deq_demonstrator.data_models import Device
 from deq_demonstrator.settings import settings
+from deq_demonstrator.utils.setup_logger import setup_logger
 
 
 class BuildingFiware(Building, Device):
@@ -14,6 +15,8 @@ class BuildingFiware(Building, Device):
     """
     def __init__(self, building_id: int, nodes: dict, *args, **kwargs):
         self.stop_event = kwargs.get("stop_event", None)
+
+        self.logger = setup_logger(name=f"BuildingFiware {building_id}", cd=None, level="INFO")
 
         # create the result handler to store the result locally
         result_handler = ResultHandler(file_name=f"{datetime.now().strftime('%m-%d_%H-%M-%S')}_building_{building_id}")
@@ -36,30 +39,30 @@ class BuildingFiware(Building, Device):
                                  port=settings.MQTT_PORT)
 
     def on_connect(self, client, userdata, flags, rc) -> None:
-        print(f"Connected with result code {rc}")
+        self.logger.info(f"Connected with result code {rc}")
         client.subscribe(self.topic)
-        print(f"Subscribed to topic {self.topic}")
+        self.logger.info(f"Subscribed to topic {self.topic}")
 
     def on_message(self, client, userdata, message) -> None:
         match message.topic:
             case "/building/calculate_forecast":
-                print(f"Building {self.building_id}: Received message to calculate forecast")
+                self.logger.debug(f"Building {self.building_id}: Received message to calculate forecast")
                 self.calculate_forecast()
-                print(f"Building {self.building_id}: Forecast calculated")
+                self.logger.debug(f"Building {self.building_id}: Forecast calculated")
                 client.publish(topic="/notification/forecast", payload=f"{self.building_id}")
             case "/building/optimize":
-                print(f"Building {self.building_id}: Received message to optimize")
+                self.logger.debug(f"Building {self.building_id}: Received message to optimize")
                 self.run_optimization()
                 self.trigger_bid_creation()
-                print(f"Building {self.building_id}: Optimization done and bid created.")
+                self.logger.debug(f"Building {self.building_id}: Optimization done and bid created.")
                 client.publish(topic="/notification/optimize", payload=f"{self.building_id}")
             case "/building/prepare":
-                print(f"Building {self.building_id}: Received message to prepare")
+                self.logger.debug(f"Building {self.building_id}: Received message to prepare")
                 self.update_and_prepare_for_next_opti_step()
-                print(f"Building {self.building_id}: Building prepared")
+                self.logger.debug(f"Building {self.building_id}: Building prepared")
                 client.publish(topic="/notification/prepared", payload=f"{self.building_id}")
             case _:
-                print(f"Building {self.building_id}: Received message on unknown topic {message.topic}")
+                self.logger.warning(f"Building {self.building_id}: Received message on unknown topic {message.topic}")
 
     def run(self):
         """

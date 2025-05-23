@@ -1,4 +1,5 @@
 import copy
+import logging
 import threading
 import time
 from datetime import datetime
@@ -8,6 +9,7 @@ from typing_extensions import override
 from filip.models.ngsi_v2.context import NamedContextAttribute
 from requests.exceptions import HTTPError
 from deq_demonstrator.utils import json_schema2context_entity
+from deq_demonstrator.utils.setup_logger import setup_logger
 from deq_demonstrator.config import ROOT_DIR
 import json
 
@@ -19,7 +21,9 @@ from deq_demonstrator.settings import settings
 class CoordinatorFiware(Coordinator, Device):
     def __init__(self, building_ids, *args, **kwargs):
         self.stop_event = kwargs.get("stop_event", None)
-
+        # Set up the logger
+        self.logger = setup_logger(name="CoordinatorFiware", cd=None, level="INFO")
+        
         result_handler = ResultHandler(file_name=f"{datetime.now().strftime('%m-%d_%H-%M-%S')}_coordinator")
         Coordinator.__init__(self, result_handler=result_handler)
         Device.__init__(self, *args, **kwargs)
@@ -59,10 +63,10 @@ class CoordinatorFiware(Coordinator, Device):
         """
         Request the agents to send their bids and collect them.
         """
-        print("Collecting bids")
+        self.logger.info("Collecting bids")
         # Send notification to the agents to send their bids and wait for them to sent confirmations
         info = self.mqtt_client_notification_handler.publish("/agent/submit_bid")
-        wait_for_events(events=self.bid_events, timeout=None)
+        self.wait_for_events(events=self.bid_events, timeout=None)
         reset_events(events=self.bid_events)
 
         # Collect the bids from the agents
@@ -115,7 +119,7 @@ class CoordinatorFiware(Coordinator, Device):
         self.publish_offers(offers)
         self.mqtt_client_notification_handler.publish("/agent/counteroffer", payload="all")
         # Wait for the agents to send their counteroffers
-        wait_for_events(events=self.agent_events, timeout=None)
+        self.wait_for_events(events=self.agent_events, timeout=None)
         # Collect the counteroffers from the agents
         return self.collect_offers()
 
@@ -209,11 +213,11 @@ class CoordinatorFiware(Coordinator, Device):
                     entity_id=f"Trade:DEQ:MVP:{trade.seller}:{trade.buyer}",
                     attr=attribute
                 )
-        print("Published trades. Waiting for agents to receive them.")
+        self.logger.info("Published trades. Waiting for agents to receive them.")
 
         # Notify the agents to receive the trades and wait for them to confirm the reception
         self.mqtt_client_notification_handler.publish(topic="/agent/receive_trade")
-        wait_for_events(events=self.trade_events, timeout=None)
+        self.wait_for_events(events=self.trade_events, timeout=None)
         reset_events(events=self.trade_events)
 
     @override
@@ -237,45 +241,45 @@ class CoordinatorFiware(Coordinator, Device):
         self.cb_client.delete_entities(entities=self.cb_client.get_entity_list(type_pattern="Trade"))
 
     def on_connect(self, client, userdata, flags, rc) -> None:
-        print(f"Connected with result code {rc}")
+        self.logger.info(f"Connected with result code {rc}")
         client.subscribe(self.topic)
-        print(f"Subscribed to topic {self.topic}")
+        self.logger.info(f"Subscribed to topic {self.topic}")
 
     def on_connect_notification_handler(self, client, userdata, flags, rc) -> None:
-        print(f"Connected with result code {rc}")
+        self.logger.info(f"Connected with result code {rc}")
         client.subscribe(self.topic_notification_handler)
-        print(f"Subscribed to topic {self.topic_notification_handler}")
+        self.logger.info(f"Subscribed to topic {self.topic_notification_handler}")
 
     def on_message(self, client, userdata, message) -> None:
         match message.topic:
             case "/coordinator/collect_bids":
-                print("Received message to collect bids")
+                self.logger.debug("Received message to collect bids")
                 self.collect_bids()
             case "/coordinator/negotiation":
-                print("Received message to start negotiation")
+                self.logger.debug("Received message to start negotiation")
                 self.run_negotiation()
-                print("Negotiation done")
+                self.logger.info("Negotiation done")
                 self.mqtt_client.publish(topic="/notification/negotiation", payload="C", qos=1)
             case _:
-                print(f"Coordinator received message on unknown topic {message.topic}")
+                self.logger.warning(f"Coordinator received message on unknown topic {message.topic}")
 
     def on_message_notification_handler(self, client, userdata, message) -> None:
         match message.topic:
             case topic if "/notification/published_offer" in topic:
-                print("Received message that an agent has published an offer")
+                self.logger.debug("Received message that an agent has published an offer")
                 agent = topic.split("/")[-1]
                 if agent in self.agent_events:
                     self.agent_events[agent].set()
             case "/notification/bid":
                 id_ = message.payload.decode()
-                print(f"Received bid notification for agent {id_}")
-                self.bid_events[id_].set() if id_ in self.bid_events else print("Could not set bid event.")
+                self.logger.debug(f"Received bid notification for agent {id_}")
+                self.bid_events[id_].set() if id_ in self.bid_events else self.logger.warning("Could not set bid event.")
             case "/notification/trade":
                 id_ = message.payload.decode()
-                print(f"Received trade notification for agent {id_}")
-                self.trade_events[id_].set() if id_ in self.trade_events else print("Could not set trade event.")
+                self.logger.debug(f"Received trade notification for agent {id_}")
+                self.trade_events[id_].set() if id_ in self.trade_events else self.logger.warning("Could not set trade event.")
             case _:
-                print(f"Coordinator received unknown notification {message.topic}")
+                pass
 
     def run_mqtt_client(self):
         """
@@ -313,19 +317,18 @@ class CoordinatorFiware(Coordinator, Device):
         for thread in threads:
             thread.start()
 
-
-def wait_for_events(events, timeout):
-    start_time = time.time()
-    if timeout is None:
-        while not all(event.is_set() for event in events.values()):
-            time.sleep(0.1)
-        print("All events set.")
-    else:
-        while time.time() - start_time < timeout:
-            if all(event.is_set() for event in events.values()):
-                print("All events set.")
-                break
-            time.sleep(0.1)
+    def wait_for_events(self, events, timeout):
+        start_time = time.time()
+        if timeout is None:
+            while not all(event.is_set() for event in events.values()):
+                time.sleep(0.1)
+            self.logger.debug("All events set.")
+        else:
+            while time.time() - start_time < timeout:
+                if all(event.is_set() for event in events.values()):
+                    self.logger.debug("All events set.")
+                    break
+                time.sleep(0.1)
 
 
 def reset_events(events):
