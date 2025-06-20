@@ -46,8 +46,8 @@ def run_buildings(stop_event, building_ix, nodes):
     building = BuildingFiware(
         building_id=building_ix,
         nodes=nodes,
-        entity_id=f"Building:DEQ:MVP:{building_ix}",
-        entity_type="Building",
+        entity_id=f"MarketAgent:DEQ:MVP:{building_ix}",
+        entity_type="MarketAgent",
         building_ix=building_ix,
         stop_event=stop_event,
         data_model=copy.deepcopy(data_model),
@@ -84,7 +84,7 @@ def set_up(stop_event):
     print("Started coordinator")
 
     # load the nodes with the building data
-    with open(ROOT_DIR / 'data' / '01_input' / '06_building_nodes' / 'nodes_CISBAT_144.p', 'rb') as f:
+    with open(ROOT_DIR / 'data' / '01_input' / '06_building_nodes' / 'test_nodes.p', 'rb') as f:
         nodes = pickle.load(f)
 
     # set up the buildings
@@ -93,7 +93,7 @@ def set_up(stop_event):
                              name=f"building_{building_ix}")
         threads.append(t)
         t.start()
-        time.sleep(5)
+        time.sleep(2)
     print("Started buildings")
 
     # set up the market controller
@@ -113,6 +113,11 @@ def main():
     stop_event = threading.Event()
     # set up all components
     threads = set_up(stop_event=stop_event)
+
+    time.sleep(1)  # wait for all components to start
+    print("All components started. \n"
+          "Send a MQTT message to /controller/start to start the market. \n"
+          "Stop the market by sending a message to /controller/stop.")
 
     # loop to keep the main thread alive, stopping all threads when a KeyboardInterrupt is received or stop_event is set
     while not stop_event.is_set():

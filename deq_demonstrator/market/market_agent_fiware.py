@@ -22,7 +22,7 @@ class MarketAgentFiware(MarketAgent, Device):
     def __init__(self, agent_id: int, building: "Building", *args, **kwargs):
         self.stop_event = kwargs.get("stop_event", None)
 
-        self.logger = setup_logger(name=f"MarketAgentFiware {agent_id}", cd=None, level="INFO")
+        self.logger = setup_logger(name=f"MarketAgentFiware {agent_id}", cd=None, level="DEBUG")
 
         MarketAgent.__init__(self, agent_id=agent_id, building=building)
         Device.__init__(self, *args, **kwargs)
@@ -34,34 +34,19 @@ class MarketAgentFiware(MarketAgent, Device):
         self.mqtt_client.connect(host=settings.MQTT_HOST,
                                  port=settings.MQTT_PORT)
 
-        keys = ["prices", "quantities", "meanPrice", "totalQuantity", "buying", "selling", "flexEnergy"]
+        keys = ["bid", "offer"]
         # Initialize the attributes
         self.attributes = {
             key: Attribute(device=self, name=key, initial_value=None) for key in keys
         }
 
-        # Create a bid entity from the data model
-        schema_path = ROOT_DIR / 'deq_demonstrator' / 'data_models' / 'schema' / 'Bid.json'
-        with open(schema_path) as f:
-            data_model = json.load(f)
-        self.bid_entity = json_schema2context_entity(json_schema_dict=data_model,
-                                                     entity_id=f"Bid:DEQ:MVP:{self.agent_id}",
-                                                     entity_type="Bid")
-
-        schema_path = ROOT_DIR / 'deq_demonstrator' / 'data_models' / 'schema' / 'Offer.json'
-        with open(schema_path) as f:
-            self.offer_data_model = json.load(f)
-
     # Override the methods for sending and receiving data in order to use FIWARE
 
     @override
     def submit_bid(self):
-        # Create a new bid entity from the data model if it does not exist yet
-        try:
-            self.cb_client.get_entity(entity_id=f"Bid:DEQ:MVP:{self.agent_id}")
-        except HTTPError as err:
-            if err.response.status_code == 404:
-                self.cb_client.post_entity(self.bid_entity)
+        """
+        Submit the bid by updating the bid attribute in the market agent entity.
+        """
 
         # read the attributes that need to be submitted from the bid that was created by the agent before
         bid_attributes = {
@@ -71,127 +56,82 @@ class MarketAgentFiware(MarketAgent, Device):
             "totalQuantity": self.bid.total_quantity,
             "buying": self.bid.buying,
             "selling": self.bid.selling,
-            "flexEnergy": self.bid.flex_energy
+            "flexEnergy": self.bid.flex_energy,
+            "used": False
         }
 
         # update the attributes in the bid entity
-        # TODO: maybe faster to update all attributes at once?
-        for key, value in bid_attributes.items():
-            if isinstance(value, list):
-                attr_type = "Array"
-            elif isinstance(value, bool):
-                attr_type = "Boolean"
-            elif isinstance(value, int) or isinstance(value, float):
-                attr_type = "Number"
-            else:
-                attr_type = "String"
-
-            attribute = NamedContextAttribute(
-                name=key,
-                type=attr_type,
-                value=value
-            )
-            self.cb_client.update_entity_attribute(
-                entity_id=f"Bid:DEQ:MVP:{self.agent_id}",
-                attr=attribute
-            )
+        self.attributes["bid"].value = bid_attributes
+        self.attributes["bid"].push()
 
     @override
     def receive_offer(self, offer: Offer = None) -> None:
         """
-        Receive the offer from the market that is addressed to this agent.
+        Collect the offers from the coordinator that are addressed to this agent.
         """
-        # all offers that are addressed to this agent are received, offers are specified in the form of
-        # Offer:DEQ:MVP:O:<offering_agent_id>:<receiving_agent_id>
-        offer_entities = self.cb_client.get_entity_list(type_pattern="Offer", id_pattern=f".*:{self.agent_id}$")
-        # there should be only one offer at a time, otherwise an exception is raised
-        if len(offer_entities) > 1:
-            raise Exception("More than one offer received")
-        elif len(offer_entities) == 0:
-            return
-        # create the offer object from the received entity
-        self.offer = Offer(
-            offering_agent_id=offer_entities[0].offeringAgentID.value,
-            receiving_agent_id=offer_entities[0].receivingAgentID.value,
-            prices=offer_entities[0].prices.value,
-            quantities=offer_entities[0].quantities.value,
-            buying=offer_entities[0].buying.value,
-            selling=offer_entities[0].selling.value
-        )
-        # delete the offer entity from the context broker to make sure it is not used again
-        self.cb_client.delete_entity(entity_id=offer_entities[0].id, entity_type="Offer")
+        coordinator_entity = self.cb_client.get_entity_list(entity_types="Coordinator")
+        if len(coordinator_entity) != 1:
+            raise Exception(
+                f"MarketAgent {self.agent_id} found {len(coordinator_entity)} Coordinator entities, expected 1")
+        offers = coordinator_entity[0].offers.value
+        # Iterate through all offers and create Offer objects for those that are addressed to this agent and not used
+        for offer_attrs in offers:
+            if offer_attrs["receivingAgentID"] == self.agent_id:
+                if offer_attrs["used"]:
+                    self.logger.info(f"Offer {offer_attrs} already used, skipping")
+                    continue
+                self.offer = Offer(
+                    offering_agent_id=offer_attrs["offeringAgentID"],
+                    receiving_agent_id=offer_attrs["receivingAgentID"],
+                    prices=offer_attrs["prices"],
+                    quantities=offer_attrs["quantities"],
+                    buying=offer_attrs["buying"],
+                    selling=offer_attrs["selling"]
+                )
 
     @override
-    def publish_counteroffer(self) -> None:
-        offer_id = f"Offer:DEQ:MVP:C:{self.counteroffer.offering_agent_id}:{self.counteroffer.receiving_agent_id}"
-        # Create a new offer entity from the data model if it does not exist yet
-        try:
-            self.cb_client.get_entity(entity_id=offer_id)
-        except HTTPError as err:
-            if err.response.status_code == 404:
-                entity = json_schema2context_entity(json_schema_dict=copy.deepcopy(self.offer_data_model),
-                                                    entity_id=offer_id,
-                                                    entity_type="Offer")
-                self.cb_client.post_entity(entity)
-
-        # read the attributes that need to be submitted from the counteroffer that was created by the agent before
+    def publish_counteroffer(self):
+        """
+        Publish the counteroffer by updating the offer attribute in the market agent entity.
+        """
         offer_attributes = {
             "offeringAgentID": self.counteroffer.offering_agent_id,
             "receivingAgentID": self.counteroffer.receiving_agent_id,
             "prices": self.counteroffer.get_prices(),
             "quantities": self.counteroffer.get_quantities(),
             "buying": self.counteroffer.buying,
-            "selling": self.counteroffer.selling
+            "selling": self.counteroffer.selling,
+            "used": False
         }
-
-        # update the attributes in the offer entity
-        for key, value in offer_attributes.items():
-            if isinstance(value, list):
-                attr_type = "Array"
-            elif isinstance(value, bool):
-                attr_type = "Boolean"
-            elif isinstance(value, int) or isinstance(value, float):
-                attr_type = "Number"
-            else:
-                attr_type = "String"
-
-            attribute = NamedContextAttribute(
-                name=key,
-                type=attr_type,
-                value=value
-            )
-            self.cb_client.update_entity_attribute(
-                entity_id=offer_id,
-                attr=attribute
-            )
+        self.attributes["offer"].value = offer_attributes
+        self.attributes["offer"].push()
         self.offer = None
 
     @override
     def receive_trade(self, trade: Trade = None) -> None:
         """
-        Receive the trade from the market that is addressed to this agent.
+        Collect the trades from the coordinator that are addressed to this agent.
         """
-        # all trades in which the agent occurs are received, trades are specified in the form of
-        # Trade:DEQ:MVP:T:<buying_agent_id>:<selling_agent_id>
-        trade_entities = self.cb_client.get_entity_list(type_pattern="Trade", id_pattern=f".*:{self.agent_id}$")
-        trade_entities.extend(
-            self.cb_client.get_entity_list(type_pattern="Trade", id_pattern=f".*:{self.agent_id}:.*")
-        )
-        # there should be only one trade at a time, otherwise an exception is raised
-        if len(trade_entities) > 1:
-            raise Exception("More than one trade received")
-        elif len(trade_entities) == 0:
-            return
-        # create the trade object from the received entity
-        trade = Trade(
-            buyer=trade_entities[0].buyer.value,
-            seller=trade_entities[0].seller.value,
-            prices=trade_entities[0].prices.value,
-            quantities=trade_entities[0].quantities.value
-        )
-        # store the trade and adjust the bid accordingly
-        self.trades.append(trade)
-        self.adjust_bid(trade)
+        coordinator_entity = self.cb_client.get_entity_list(entity_types="Coordinator")
+        if len(coordinator_entity) != 1:
+            raise Exception(f"MarketAgent {self.agent_id} found {len(coordinator_entity)} Coordinator entities, expected 1")
+        trades = coordinator_entity[0].trades.value
+        # Iterate through all trades and create Trade objects
+        for trade_attrs in trades:
+            if trade_attrs["buyer"] == self.agent_id or trade_attrs["seller"] == self.agent_id:
+                if trade_attrs["used"]:
+                    self.logger.info(f"Trade {trade_attrs} already used, skipping")
+                    continue
+                trade = Trade(
+                    buyer=trade_attrs["buyer"],
+                    seller=trade_attrs["seller"],
+                    prices=trade_attrs["prices"],
+                    quantities=trade_attrs["quantities"]
+                )
+                # store the trade and adjust the bid accordingly
+                self.trades.append(trade)
+                self.adjust_bid(trade)
+
 
     def on_connect(self, client, userdata, flags, rc) -> None:
         self.logger.info(f"Connected with result code {rc}")

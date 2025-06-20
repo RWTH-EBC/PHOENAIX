@@ -14,7 +14,7 @@ from deq_demonstrator.config import ROOT_DIR
 import json
 
 from local_energy_market.classes import Coordinator, Offer, BlockBid, BidFragment, ResultHandler
-from deq_demonstrator.data_models import Device
+from deq_demonstrator.data_models import Device, Attribute
 from deq_demonstrator.settings import settings
 
 
@@ -22,7 +22,7 @@ class CoordinatorFiware(Coordinator, Device):
     def __init__(self, building_ids, *args, **kwargs):
         self.stop_event = kwargs.get("stop_event", None)
         # Set up the logger
-        self.logger = setup_logger(name="CoordinatorFiware", cd=None, level="INFO")
+        self.logger = setup_logger(name="CoordinatorFiware", cd=None, level="DEBUG")
         
         result_handler = ResultHandler(file_name=f"{datetime.now().strftime('%m-%d_%H-%M-%S')}_coordinator")
         Coordinator.__init__(self, result_handler=result_handler)
@@ -44,18 +44,16 @@ class CoordinatorFiware(Coordinator, Device):
         self.mqtt_client_notification_handler.connect(host=settings.MQTT_HOST,
                                                       port=settings.MQTT_PORT)
 
-        schema_path = ROOT_DIR / 'deq_demonstrator' / 'data_models' / 'schema' / 'Offer.json'
-        with open(schema_path) as f:
-            self.offer_data_model = json.load(f)
-
-        schema_path = ROOT_DIR / 'deq_demonstrator' / 'data_models' / 'schema' / 'Trade.json'
-        with open(schema_path) as f:
-            self.trade_data_model = json.load(f)
-
         self.building_ids = building_ids
         self.bid_events = {str(building_id): threading.Event() for building_id in building_ids}
         self.trade_events = {str(building_id): threading.Event() for building_id in building_ids}
         self.agent_events = {}
+
+        keys = ["trades", "offers"]
+        # Initialize the attributes
+        self.attributes = {
+            key: Attribute(device=self, name=key, initial_value=[]) for key in keys
+        }
 
     # Override the methods for sending and receiving data in order to use FIWARE
     @override
@@ -70,22 +68,36 @@ class CoordinatorFiware(Coordinator, Device):
         reset_events(events=self.bid_events)
 
         # Collect the bids from the agents
-        bid_entities = self.cb_client.get_entity_list(type_pattern="Bid")
         bids = []
-        for bid_entity in bid_entities:
-            bid_attrs = self.cb_client.get_entity_attributes(entity_id=bid_entity.id)
-            agent_id = bid_entity.id.split(":")[-1]
-            bid = BlockBid(agent_id=agent_id)
-            prices = bid_attrs["prices"].value
-            quantities = bid_attrs["quantities"].value
-            bid.buying = bid_attrs["buying"].value
-            bid.selling = bid_attrs["selling"].value
-            bid.flex_energy = bid_attrs["flexEnergy"].value
+        # Get all market agent entities from the context broker
+        market_agent_entities = self.cb_client.get_entity_list(type_pattern="MarketAgent")
+        for market_agent_entity in market_agent_entities:
+            # Read the bid attribute from the market agent entity and create a BlockBid object
+            bid_attrs = market_agent_entity.bid.value
+            if not bid_attrs:
+                self.logger.debug(f"Bid from agent {market_agent_entity.id} is empty, skipping.")
+                continue
+            if bid_attrs["used"]:
+                self.logger.debug(f"Bid from agent {market_agent_entity.id} is already used, skipping.")
+                continue
+            bid = BlockBid(agent_id=market_agent_entity.id.split(":")[-1],
+                           buying=bid_attrs["buying"],
+                           selling=bid_attrs["selling"],
+                           flex_energy=bid_attrs["flexEnergy"],
+                           )
             # Create the bids from the BidFragments
-            for price, quantity in zip(prices, quantities):
+            for price, quantity in zip(bid_attrs["prices"], bid_attrs["quantities"]):
                 bid_fragment = BidFragment(price=price, quantity=quantity, buying=bid.buying, selling=bid.selling)
                 bid.add_bid_fragment(bid_fragment)
             bids.append(bid)
+            # Set the used attribute of the bids to True
+            market_agent_entity.bid.value["used"] = True
+            self.cb_client.update_entity_attribute(entity_id=market_agent_entity.id,
+                                                   attr=NamedContextAttribute(name="bid",
+                                                                              type="StructuredValue",
+                                                                              value=market_agent_entity.bid.value))
+
+
         self.submitted_bids = bids
         self.result_handler.save_bids(id_="c", data=bids)
 
@@ -93,18 +105,32 @@ class CoordinatorFiware(Coordinator, Device):
         """
         Collect the offers from the agents and return them.
         """
-        offer_entities = self.cb_client.get_entity_list(type_pattern="Offer")
+        market_agent_entities = self.cb_client.get_entity_list(type_pattern="MarketAgent")
         offers = []
-        for offer_entity in offer_entities:
+        for market_agent_entity in market_agent_entities:
+            offer_attrs = market_agent_entity.offer.value
+            # Check if the offer is empty or already used
+            if not offer_attrs:
+                self.logger.info(f"Offer from agent {market_agent_entity.id} is empty, skipping.")
+                continue
+            if offer_attrs["used"]:
+                self.logger.info(f"Offer from agent {offer_attrs['offeringAgentID']} is already used, skipping.")
+                continue
+            # Create an Offer object from the offer attributes
             offers.append(Offer(
-                offering_agent_id=offer_entity.offeringAgentID.value,
-                receiving_agent_id=offer_entity.receivingAgentID.value,
-                prices=offer_entity.prices.value,
-                quantities=offer_entity.quantities.value,
-                buying=offer_entity.buying.value,
-                selling=offer_entity.selling.value
+                offering_agent_id = offer_attrs["offeringAgentID"],
+                receiving_agent_id = offer_attrs["receivingAgentID"],
+                prices=offer_attrs["prices"],
+                quantities=offer_attrs["quantities"],
+                buying=offer_attrs["buying"],
+                selling=offer_attrs["selling"]
             ))
-        self.cb_client.delete_entities(offer_entities)
+            # Set the used attribute of the offers to True
+            market_agent_entity.offer.value["used"] = True
+            self.cb_client.update_entity_attribute(entity_id=market_agent_entity.id,
+                                                   attr=NamedContextAttribute(name="offer",
+                                                                              type="StructuredValue",
+                                                                              value=market_agent_entity.offer.value))
         return offers
 
     @override
@@ -120,105 +146,62 @@ class CoordinatorFiware(Coordinator, Device):
         self.mqtt_client_notification_handler.publish("/agent/counteroffer", payload="all")
         # Wait for the agents to send their counteroffers
         self.wait_for_events(events=self.agent_events, timeout=None)
+        # Set the used attribute of the offers to True
+        for offer_attr in self.attributes["offers"].value:
+            offer_attr["used"] = True
+        self.attributes["offers"].push()
         # Collect the counteroffers from the agents
         return self.collect_offers()
 
-    def publish_offers(self, offers: list[Offer]) -> None:
+    def publish_offers(self, offers: list[Offer]):
         """
-        Publish the offers to the market.
+        Publish the offers by updating the offers attribute of the Coordinator entity.
         """
-
         for offer in offers:
-            # Create a new entity for the offer if it does not exist already
-            try:
-                self.cb_client.get_entity(entity_id=f"Offer:DEQ:MVP:C:{offer.receiving_agent_id}")
-            except HTTPError as err:
-                if err.response.status_code == 404:
-                    entity = json_schema2context_entity(json_schema_dict=copy.deepcopy(self.offer_data_model),
-                                                        entity_id=f"Offer:DEQ:MVP:C:{offer.receiving_agent_id}",
-                                                        entity_type="Offer")
-                    self.cb_client.post_entity(entity)
-
-            # Map the entity attributes to the offer attributes
             offer_attributes = {
                 "offeringAgentID": offer.offering_agent_id,
                 "receivingAgentID": offer.receiving_agent_id,
                 "prices": offer.get_prices(),
                 "quantities": offer.get_quantities(),
                 "buying": offer.buying,
-                "selling": offer.selling
+                "selling": offer.selling,
+                "used": False
             }
+            self.attributes["offers"].value.append(offer_attributes)
+        self.attributes["offers"].push()
 
-            # Update the entity attributes
-            for key, value in offer_attributes.items():
-                if isinstance(value, list):
-                    attr_type = "Array"
-                elif isinstance(value, bool):
-                    attr_type = "Boolean"
-                elif isinstance(value, int) or isinstance(value, float):
-                    attr_type = "Number"
-                else:
-                    attr_type = "String"
-
-                attribute = NamedContextAttribute(
-                    name=key,
-                    type=attr_type,
-                    value=value
-                )
-                self.cb_client.update_entity_attribute(
-                    entity_id=f"Offer:DEQ:MVP:C:{offer.receiving_agent_id}",
-                    attr=attribute
-                )
 
     @override
-    def publish_trades(self) -> None:
+    def publish_trades(self):
         """
-        Publish the trades to the market and notify the agents to receive them.
+        Publish the trades by updating the trades attribute of the Coordinator entity.
         """
         for trade in self.trades:
-            # Create a new entity for the trade if it does not exist already
-            try:
-                self.cb_client.get_entity(entity_id=f"Trade:DEQ:MVP:{trade.seller}:{trade.buyer}")
-            except HTTPError as err:
-                if err.response.status_code == 404:
-                    entity = json_schema2context_entity(json_schema_dict=copy.deepcopy(self.trade_data_model),
-                                                        entity_id=f"Trade:DEQ:MVP:{trade.seller}:{trade.buyer}",
-                                                        entity_type="Trade")
-                    self.cb_client.post_entity(entity)
-
-            # Map the entity attributes to the trade attributes
             trade_attributes = {
                 "buyer": trade.buyer,
                 "seller": trade.seller,
                 "prices": trade.prices,
-                "quantities": trade.quantities
+                "quantities": trade.quantities,
+                "used": False
             }
-            # Update the entity attributes
-            for key, value in trade_attributes.items():
-                if isinstance(value, list):
-                    attr_type = "Array"
-                elif isinstance(value, bool):
-                    attr_type = "Boolean"
-                elif isinstance(value, int) or isinstance(value, float):
-                    attr_type = "Number"
-                else:
-                    attr_type = "String"
+            self.attributes["trades"].value.append(trade_attributes)
+        self.attributes["trades"].push(timestamp=datetime.now().isoformat())
 
-                attribute = NamedContextAttribute(
-                    name=key,
-                    type=attr_type,
-                    value=value
-                )
-                self.cb_client.update_entity_attribute(
-                    entity_id=f"Trade:DEQ:MVP:{trade.seller}:{trade.buyer}",
-                    attr=attribute
-                )
         self.logger.info("Published trades. Waiting for agents to receive them.")
 
         # Notify the agents to receive the trades and wait for them to confirm the reception
         self.mqtt_client_notification_handler.publish(topic="/agent/receive_trade")
         self.wait_for_events(events=self.trade_events, timeout=None)
         reset_events(events=self.trade_events)
+        self.set_trades_used()
+
+    def set_trades_used(self):
+        """
+        Set the used attribute of the trades to True in the Coordinator entity.
+        """
+        for trade in self.attributes["trades"].value:
+            trade["used"] = True
+        self.attributes["trades"].push(timestamp=datetime.now().isoformat())
 
     @override
     def clear_for_next_round(self) -> None:
@@ -230,15 +213,15 @@ class CoordinatorFiware(Coordinator, Device):
         self.buying_offers = []
         self.selling_offers = []
         self.clear_bids()
-        self.clear_fiware_for_next_round()
 
     def clear_fiware_for_next_round(self):
         """
         Clear the FIWARE context broker for the next round of the market.
         """
-        self.cb_client.delete_entities(entities=self.cb_client.get_entity_list(type_pattern="Bid"))
-        self.cb_client.delete_entities(entities=self.cb_client.get_entity_list(type_pattern="Offer"))
-        self.cb_client.delete_entities(entities=self.cb_client.get_entity_list(type_pattern="Trade"))
+        self.attributes["trades"].value = []
+        self.attributes["trades"].push()
+        self.attributes["offers"].value = []
+        self.attributes["offers"].push()
 
     def on_connect(self, client, userdata, flags, rc) -> None:
         self.logger.info(f"Connected with result code {rc}")
@@ -257,6 +240,7 @@ class CoordinatorFiware(Coordinator, Device):
                 self.collect_bids()
             case "/coordinator/negotiation":
                 self.logger.debug("Received message to start negotiation")
+                self.clear_fiware_for_next_round()
                 self.run_negotiation()
                 self.logger.info("Negotiation done")
                 self.mqtt_client.publish(topic="/notification/negotiation", payload="C", qos=1)

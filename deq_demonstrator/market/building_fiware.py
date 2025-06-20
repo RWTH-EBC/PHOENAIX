@@ -16,7 +16,7 @@ class BuildingFiware(Building, Device):
     def __init__(self, building_id: int, nodes: dict, *args, **kwargs):
         self.stop_event = kwargs.get("stop_event", None)
 
-        self.logger = setup_logger(name=f"BuildingFiware {building_id}", cd=None, level="INFO")
+        self.logger = setup_logger(name=f"BuildingFiware {building_id}", cd=None, level="DEBUG")
 
         # create the result handler to store the result locally
         result_handler = ResultHandler(file_name=f"{datetime.now().strftime('%m-%d_%H-%M-%S')}_building_{building_id}")

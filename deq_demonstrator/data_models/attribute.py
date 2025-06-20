@@ -65,11 +65,35 @@ class Attribute:
                 type="Array",
                 value=self.value
             )
-        else:
+        elif isinstance(self.value, (float, int)):
             attribute = NamedContextAttribute(
                 name=self.name,
                 # TODO solution
                 type="Number",
+                value=self.value,
+                metadata=metadata
+            )
+        elif isinstance(self.value, str):
+            attribute = NamedContextAttribute(
+                name=self.name,
+                # TODO solution
+                type="String",
+                value=self.value,
+                metadata=metadata
+            )
+        elif isinstance(self.value, bool):
+            attribute = NamedContextAttribute(
+                name=self.name,
+                # TODO solution
+                type="Boolean",
+                value=self.value,
+                metadata=metadata
+            )
+        else:
+            attribute = NamedContextAttribute(
+                name=self.name,
+                # TODO solution
+                type="StructuredValue",
                 value=self.value,
                 metadata=metadata
             )          

@@ -45,7 +45,7 @@ class MarketController:
                                 for event in building_events}
 
         # define how much time each round should take to simulate real time
-        self.time_per_round = 0  # seconds
+        self.time_per_round = 5  # seconds
 
         self.whole_round_times = []
         self.negotiation_times = []
