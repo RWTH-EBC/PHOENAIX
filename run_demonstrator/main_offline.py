@@ -7,10 +7,12 @@ from deq_demonstrator.simulation.modelica import ModelicaAgent
 from tqdm import tqdm
 import pandas as pd
 import copy
+from pprint import pprint
 
 def main():
-    schema_path = Path.cwd() / 'core' / 'data_models' /\
+    schema_path = Path(__file__).parents[1] / 'deq_demonstrator' / 'data_models' /\
         'schema' / 'BuildingEnergyForecast.json'
+
     with open(schema_path) as f:
         data_model = json.load(f)
 
@@ -27,7 +29,7 @@ def main():
         )
         building_forecasts[building_ix] = building_energy_forecast
         
-    schema_path = Path.cwd() / 'core' / 'data_models' /\
+    schema_path =  Path(__file__).parents[1] / 'deq_demonstrator' / 'data_models' /\
         'schema' / 'MPC.json'
     with open(schema_path) as f:
         data_model = json.load(f)
@@ -38,7 +40,7 @@ def main():
         offline_modus=True  
     )
 
-    schema_path = Path.cwd() / 'core' / 'data_models' /\
+    schema_path = Path(__file__).parents[1] / 'deq_demonstrator' / 'data_models' /\
         'schema' / 'ModelicaAgent.json'
     with open(schema_path) as f:
         data_model = json.load(f)
@@ -78,7 +80,7 @@ def main():
                     input_dict_mpc[translation] = {}
                 
                 input_dict_mpc[translation][ix] = values
-
+        
         mpc_results = mpc.predict(input_dict=input_dict_mpc,
                                 soc_init=soc_init)
         
@@ -92,6 +94,7 @@ def main():
         else:
             input_modelica = {key: mpc_results[key] for key in input_modelica_keys}
 
+        
         modelica_results = modelica.do_step(input_modelica)
         res = {**modelica_results, **input_modelica}
         results.append(copy.deepcopy(res))
