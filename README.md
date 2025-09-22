@@ -1,4 +1,5 @@
-# DEQ - MVP
+# PHOENAIX
+PHOENAIX is a framework designed to enable the seamless integration of simulation models, prediction algorithms, and optimization routines through standardized data communication protocols. This platform-centric approach allows for the modular deployment of various energy system components and their operating strategies, while maintaining system-wide interoperability. The flexible architecture of the framework not only supports the integration of various simulation tools, but also enables the gradual transition from simulated to real components, making it particularly valuable for the planning and operational phases of urban energy systems.
 **⚠️ Important: This repository uses Git LFS**
 
 This project tracks large data files using Git Large File Storage (LFS). To clone and work with this repository correctly, you must have the Git LFS client installed on your machine.
