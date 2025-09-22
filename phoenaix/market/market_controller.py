@@ -1,7 +1,7 @@
 import paho.mqtt.client as mqtt
 import time
-from deq_demonstrator.settings import settings
-from deq_demonstrator.utils.setup_logger import setup_logger
+from phoenaix.settings import settings
+from phoenaix.utils.setup_logger import setup_logger
 import threading
 import pickle
 from pathlib import Path

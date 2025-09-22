@@ -3,15 +3,15 @@ import paho.mqtt.client as mqtt
 import time
 from filip.models.ngsi_v2.context import NamedContextAttribute
 from requests.exceptions import HTTPError
-from deq_demonstrator.utils import json_schema2context_entity
-from deq_demonstrator.config import ROOT_DIR
+from phoenaix.utils import json_schema2context_entity
+from phoenaix.config import ROOT_DIR
 import json
 import copy
 
 from local_energy_market.classes import MarketAgent, BlockBid, Offer, Trade
-from deq_demonstrator.data_models import Device, Attribute
-from deq_demonstrator.settings import settings
-from deq_demonstrator.utils.setup_logger import setup_logger
+from phoenaix.data_models import Device, Attribute
+from phoenaix.settings import settings
+from phoenaix.utils.setup_logger import setup_logger
 
 
 class MarketAgentFiware(MarketAgent, Device):

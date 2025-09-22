@@ -1,12 +1,12 @@
 import pytest
 import json
-from deq_demonstrator.market.coordinator_fiware import CoordinatorFiware
-from deq_demonstrator.config import ROOT_DIR
-from deq_demonstrator.utils.fiware_utils import clean_up
+from phoenaix.market.coordinator_fiware import CoordinatorFiware
+from phoenaix.config import ROOT_DIR
+from phoenaix.utils.fiware_utils import clean_up
 from local_energy_market.classes import Offer, Trade
 import requests
 from filip.clients.ngsi_v2.cb import ContextBrokerClient
-from deq_demonstrator.settings import settings
+from phoenaix.settings import settings
 from filip.models.ngsi_v2.context import NamedContextAttribute, ContextEntity
 import numpy as np
 import paho.mqtt.client as mqtt
@@ -43,7 +43,7 @@ def mock_agent_mqtt_client():
 
 @pytest.fixture
 def coordinator():
-    schema_path = ROOT_DIR / 'deq_demonstrator' / 'data_models' / \
+    schema_path = ROOT_DIR / 'phoenaix' / 'data_models' / \
                   'schema' / 'Coordinator.json'
     with open(schema_path) as f:
         data_model = json.load(f)

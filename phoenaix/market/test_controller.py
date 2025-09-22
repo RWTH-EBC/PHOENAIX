@@ -1,5 +1,5 @@
 import pytest
-from deq_demonstrator.market.market_controller import MarketController
+from phoenaix.market.market_controller import MarketController
 import threading
 
 def test_init():

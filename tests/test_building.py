@@ -1,13 +1,13 @@
 import pytest
-from deq_demonstrator.market.building_fiware import BuildingFiware
+from phoenaix.market.building_fiware import BuildingFiware
 from tests.input_data import nodes_basic
-from deq_demonstrator.config import ROOT_DIR
+from phoenaix.config import ROOT_DIR
 import copy
 import json
 
 @pytest.fixture
 def building():
-    schema_path = ROOT_DIR / 'deq_demonstrator' / 'data_models' / \
+    schema_path = ROOT_DIR / 'phoenaix' / 'data_models' / \
                   'schema' / 'MarketAgent.json'
     with open(schema_path) as f:
         data_model = json.load(f)

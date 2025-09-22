@@ -1,6 +1,6 @@
 import requests
 from filip.clients.ngsi_v2.cb import ContextBrokerClient
-from deq_demonstrator.settings import settings
+from phoenaix.settings import settings
 
 
 s = requests.Session()

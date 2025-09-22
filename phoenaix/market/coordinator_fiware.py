@@ -8,14 +8,14 @@ import paho.mqtt.client as mqtt
 from typing_extensions import override
 from filip.models.ngsi_v2.context import NamedContextAttribute
 from requests.exceptions import HTTPError
-from deq_demonstrator.utils import json_schema2context_entity
-from deq_demonstrator.utils.setup_logger import setup_logger
-from deq_demonstrator.config import ROOT_DIR
+from phoenaix.utils import json_schema2context_entity
+from phoenaix.utils.setup_logger import setup_logger
+from phoenaix.config import ROOT_DIR
 import json
 
 from local_energy_market.classes import Coordinator, Offer, BlockBid, BidFragment, ResultHandler
-from deq_demonstrator.data_models import Device, Attribute
-from deq_demonstrator.settings import settings
+from phoenaix.data_models import Device, Attribute
+from phoenaix.settings import settings
 
 
 class CoordinatorFiware(Coordinator, Device):

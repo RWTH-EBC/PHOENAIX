@@ -4,12 +4,20 @@ import time
 import pickle
 import json
 
-from deq_demonstrator.market.coordinator_fiware import CoordinatorFiware
-from deq_demonstrator.market.building_fiware import BuildingFiware
-from deq_demonstrator.market.market_controller import MarketController
+# Until local_energy_market is installable:
+import sys 
+from pathlib import Path
+lem_path = Path(r"D:\Repos\local_energy_market")
 
-from deq_demonstrator.utils.fiware_utils import clean_up
-from deq_demonstrator.config import ROOT_DIR
+if str(lem_path) not in sys.path:
+    sys.path.append(str(lem_path))
+
+from phoenaix.market.coordinator_fiware import CoordinatorFiware
+from phoenaix.market.building_fiware import BuildingFiware
+from phoenaix.market.market_controller import MarketController
+
+from phoenaix.utils.fiware_utils import clean_up
+from phoenaix.config import ROOT_DIR
 
 
 def run_coordinator(building_ids, stop_event):
@@ -17,7 +25,7 @@ def run_coordinator(building_ids, stop_event):
     Set up the coordinator.
     """
     # load the data model schema for the coordinator
-    schema_path = ROOT_DIR / 'deq_demonstrator' / 'data_models' / 'schema' / 'Coordinator.json'
+    schema_path = ROOT_DIR / 'phoenaix' / 'data_models' / 'schema' / 'Coordinator.json'
     with open(schema_path) as f:
         data_model = json.load(f)
 
@@ -38,7 +46,7 @@ def run_buildings(stop_event, building_ix, nodes):
     Set up the building.
     """
     # load the data model schema for the building
-    schema_path = ROOT_DIR / 'deq_demonstrator' / 'data_models' / 'schema' / 'MarketAgent.json'
+    schema_path = ROOT_DIR / 'phoenaix' / 'data_models' / 'schema' / 'MarketAgent.json'
     with open(schema_path) as f:
         data_model = json.load(f)
 

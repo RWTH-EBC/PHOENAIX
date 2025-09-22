@@ -2,14 +2,14 @@ import pytest
 from unittest.mock import patch
 import json
 import copy
-from deq_demonstrator.market.building_fiware import BuildingFiware
+from phoenaix.market.building_fiware import BuildingFiware
 from local_energy_market.classes import BlockBid, BidFragment, Offer
 from tests.input_data import nodes_basic
-from deq_demonstrator.config import ROOT_DIR
-from deq_demonstrator.utils.fiware_utils import clean_up
+from phoenaix.config import ROOT_DIR
+from phoenaix.utils.fiware_utils import clean_up
 import requests
 from filip.clients.ngsi_v2.cb import ContextBrokerClient
-from deq_demonstrator.settings import settings
+from phoenaix.settings import settings
 from filip.models.ngsi_v2.context import NamedContextAttribute, ContextEntity
 
 @pytest.fixture
@@ -19,7 +19,7 @@ def cb_client():
 
 @pytest.fixture
 def market_agent():
-    schema_path = ROOT_DIR / 'deq_demonstrator' / 'data_models' / \
+    schema_path = ROOT_DIR / 'phoenaix' / 'data_models' / \
                   'schema' / 'MarketAgent.json'
     with open(schema_path) as f:
         data_model = json.load(f)

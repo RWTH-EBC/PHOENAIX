@@ -1,12 +1,11 @@
 import paho.mqtt.client as mqtt
 import time
 from datetime import datetime
-
 from local_energy_market.classes import Building, ResultHandler
-from deq_demonstrator.market.market_agent_fiware import MarketAgentFiware
-from deq_demonstrator.data_models import Device
-from deq_demonstrator.settings import settings
-from deq_demonstrator.utils.setup_logger import setup_logger
+from phoenaix.market.market_agent_fiware import MarketAgentFiware
+from phoenaix.data_models import Device
+from phoenaix.settings import settings
+from phoenaix.utils.setup_logger import setup_logger
 
 
 class BuildingFiware(Building, Device):
