@@ -28,5 +28,5 @@ After completing these steps, you can clone the repository as usual, and the lar
 ## Folder structure
 data/: This folder contains all the input data, output data, and processed data that will be used by the project.\
 phoenaix/: This folder contains all the core logic of the project, such as algorithms, models, and utility functions.\
-run_demonstrator/: This folder contains all the scripts that will be used to run the project.\
+examples/: This folder contains all the scripts that will be used to run the project.\
 tests/: This folder contains all the test cases for the core logic of the project.\
