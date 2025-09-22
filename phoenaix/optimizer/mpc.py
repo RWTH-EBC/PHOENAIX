@@ -7,10 +7,10 @@ import paho.mqtt.client as mqtt
 import time
 import traceback
 from requests.exceptions import HTTPError
-from deq_demonstrator.utils.setup_logger import setup_logger
-from deq_demonstrator.data_models import Device, Attribute
-from deq_demonstrator.settings import settings
-from deq_demonstrator.config import ROOT_DIR
+from phoenaix.utils.setup_logger import setup_logger
+from phoenaix.data_models import Device, Attribute
+from phoenaix.settings import settings
+from phoenaix.config import ROOT_DIR
 import pandas as pd
 import json
 import os

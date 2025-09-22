@@ -1,17 +1,17 @@
 from pathlib import Path
-from deq_demonstrator.machine_learning.heat_demand_forecast import HeatingDemandLearner
+from phoenaix.machine_learning.heat_demand_forecast import HeatingDemandLearner
 import numpy as np
 import paho.mqtt.client as mqtt
-from deq_demonstrator.machine_learning.heat_demand_forecast import HeatingDemandLearner
+from phoenaix.machine_learning.heat_demand_forecast import HeatingDemandLearner
 import json
 import pandas as pd
 import time
-from deq_demonstrator.utils.load_demands import load_demands_and_pv
-from deq_demonstrator.settings import settings
-from deq_demonstrator.utils.setup_logger import setup_logger
-from deq_demonstrator.data_models import Attribute
-from deq_demonstrator.data_models import Device
-from deq_demonstrator.config import ROOT_DIR
+from phoenaix.utils.load_demands import load_demands_and_pv
+from phoenaix.settings import settings
+from phoenaix.utils.setup_logger import setup_logger
+from phoenaix.data_models import Attribute
+from phoenaix.data_models import Device
+from phoenaix.config import ROOT_DIR
 from ebcpy import TimeSeriesData
 
 

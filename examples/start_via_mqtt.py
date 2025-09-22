@@ -1,5 +1,5 @@
 import paho.mqtt.publish as publish
-from deq_demonstrator.settings import settings
+from phoenaix.settings import settings
 
 def start():
     publish.single(topic='/mpc',

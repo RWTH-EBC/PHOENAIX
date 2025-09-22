@@ -1,16 +1,16 @@
 from pathlib import Path
 import json
 import copy
-from deq_demonstrator.forecasts.buildingEnergyForecast import BuildingEnergyForecast
-from deq_demonstrator.optimizer.mpc import MPC
-from deq_demonstrator.simulation.modelica import ModelicaAgent
+from phoenaix.forecasts.buildingEnergyForecast import BuildingEnergyForecast
+from phoenaix.optimizer.mpc import MPC
+from phoenaix.simulation.modelica import ModelicaAgent
 from tqdm import tqdm
 import pandas as pd
 import copy
 from pprint import pprint
 
 def main():
-    schema_path = Path(__file__).parents[1] / 'deq_demonstrator' / 'data_models' /\
+    schema_path = Path(__file__).parents[1] / 'phoenaix' / 'data_models' /\
         'schema' / 'BuildingEnergyForecast.json'
 
     with open(schema_path) as f:
@@ -29,7 +29,7 @@ def main():
         )
         building_forecasts[building_ix] = building_energy_forecast
         
-    schema_path =  Path(__file__).parents[1] / 'deq_demonstrator' / 'data_models' /\
+    schema_path =  Path(__file__).parents[1] / 'phoenaix' / 'data_models' /\
         'schema' / 'MPC.json'
     with open(schema_path) as f:
         data_model = json.load(f)
@@ -40,7 +40,7 @@ def main():
         offline_modus=True  
     )
 
-    schema_path = Path(__file__).parents[1] / 'deq_demonstrator' / 'data_models' /\
+    schema_path = Path(__file__).parents[1] / 'phoenaix' / 'data_models' /\
         'schema' / 'ModelicaAgent.json'
     with open(schema_path) as f:
         data_model = json.load(f)

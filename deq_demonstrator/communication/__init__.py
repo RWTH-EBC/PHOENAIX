@@ -1,2 +1,0 @@
-from deq_demonstrator.communication.gateway import Gateway
-from deq_demonstrator.communication.subscription_template import subscription_template
