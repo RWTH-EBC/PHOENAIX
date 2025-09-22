@@ -1,14 +1,14 @@
 from pathlib import Path
-from deq_demonstrator.utils.load_demands import load_demands_and_pv
+from phoenaix.utils.load_demands import load_demands_and_pv
 import paho.mqtt.client as mqtt
-from deq_demonstrator.simulation.fmu_handler import FMUHandler
+from phoenaix.simulation.fmu_handler import FMUHandler
 import time
 import traceback
 from requests.exceptions import HTTPError
-from deq_demonstrator.utils.fiware_utils import clean_up
-from deq_demonstrator.utils.setup_logger import setup_logger
-from deq_demonstrator.data_models import Device, Attribute
-from deq_demonstrator.settings import settings
+from phoenaix.utils.fiware_utils import clean_up
+from phoenaix.utils.setup_logger import setup_logger
+from phoenaix.data_models import Device, Attribute
+from phoenaix.settings import settings
 import json
 
 

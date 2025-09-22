@@ -2,7 +2,7 @@ from pydantic import Field, AnyUrl
 from pydantic_settings import BaseSettings
 from dotenv import find_dotenv
 from filip.models.base import FiwareHeader
-from deq_demonstrator.config import ROOT_DIR
+from phoenaix.config import ROOT_DIR
 from pathlib import Path
 
 

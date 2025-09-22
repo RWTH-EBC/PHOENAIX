@@ -1,5 +1,5 @@
 import pandas as pd
-from deq_demonstrator.config import ROOT_DIR
+from phoenaix.config import ROOT_DIR
 from pathlib import Path
 
 DEMANDS_PATH = ROOT_DIR / 'data' / '01_input' / '01_demands'
