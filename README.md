@@ -1,4 +1,17 @@
 # DEQ - MVP
+**⚠️ Important: This repository uses Git LFS**
+
+This project tracks large data files using Git Large File Storage (LFS). To clone and work with this repository correctly, you must have the Git LFS client installed on your machine.
+
+1.  **Install Git LFS:**
+    Download and install it from the [official website](https://git-lfs.github.com/).
+
+2.  **Initialize LFS for your user account (only needs to be done once):**
+    ```bash
+    git lfs install
+    ```
+
+After completing these steps, you can clone the repository as usual, and the large files will be downloaded correctly.
 
 ## Components
 1. Optimizer for a building neighborhood
