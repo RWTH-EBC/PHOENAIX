@@ -8,7 +8,8 @@ from phoenaix.config import ROOT_DIR
 import json
 import copy
 
-from local_energy_market.classes import MarketAgent, BlockBid, Offer, Trade
+from local_energy_market.classes import MarketAgent
+from local_energy_market.data_structures import BlockBid, Offer, Trade, LEMTrade
 from phoenaix.data_models import Device, Attribute
 from phoenaix.settings import settings
 from phoenaix.utils.setup_logger import setup_logger
@@ -19,12 +20,17 @@ class MarketAgentFiware(MarketAgent, Device):
     Market agent class for the FIWARE platform based on the local_energy_market. The agent is responsible for the
     communication with the market and the building.
     """
-    def __init__(self, agent_id: int, building: "Building", *args, **kwargs):
+    def __init__(self, agent_id: int, hems: "HEMS", *args, **kwargs):
         self.stop_event = kwargs.get("stop_event", None)
 
         self.logger = setup_logger(name=f"MarketAgentFiware {agent_id}", cd=None, level="DEBUG")
 
-        MarketAgent.__init__(self, agent_id=agent_id, building=building)
+        MarketAgent.__init__(
+            self,
+            agent_id=agent_id,
+            opti_callback=hems.opti_callback_market_agent,
+            flexibility_callback=hems.flexibility_callback_market_agent,
+        )
         Device.__init__(self, *args, **kwargs)
 
         self.mqtt_client = mqtt.Client()
@@ -83,7 +89,7 @@ class MarketAgentFiware(MarketAgent, Device):
                 self.offer = Offer(
                     offering_agent_id=offer_attrs["offeringAgentID"],
                     receiving_agent_id=offer_attrs["receivingAgentID"],
-                    prices=offer_attrs["prices"],
+                    trading_prices=offer_attrs["prices"],
                     quantities=offer_attrs["quantities"],
                     buying=offer_attrs["buying"],
                     selling=offer_attrs["selling"]
@@ -108,7 +114,7 @@ class MarketAgentFiware(MarketAgent, Device):
         self.offer = None
 
     @override
-    def receive_trade(self, trade: Trade = None) -> None:
+    def receive_trade(self, trade: LEMTrade = None, adjust_bid: bool = True) -> None:
         """
         Collect the trades from the coordinator that are addressed to this agent.
         """
@@ -122,7 +128,7 @@ class MarketAgentFiware(MarketAgent, Device):
                 if trade_attrs["used"]:
                     self.logger.info(f"Trade {trade_attrs} already used, skipping")
                     continue
-                trade = Trade(
+                trade = LEMTrade(
                     buyer=trade_attrs["buyer"],
                     seller=trade_attrs["seller"],
                     prices=trade_attrs["prices"],

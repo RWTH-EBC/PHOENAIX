@@ -13,7 +13,8 @@ from phoenaix.utils.setup_logger import setup_logger
 from phoenaix.config import ROOT_DIR
 import json
 
-from local_energy_market.classes import Coordinator, Offer, BlockBid, BidFragment, ResultHandler
+from local_energy_market.classes import Coordinator, ResultHandler
+from local_energy_market.data_structures import Offer, BlockBid, BidFragment
 from phoenaix.data_models import Device, Attribute
 from phoenaix.settings import settings
 
@@ -57,7 +58,7 @@ class CoordinatorFiware(Coordinator, Device):
 
     # Override the methods for sending and receiving data in order to use FIWARE
     @override
-    def collect_bids(self) -> None:
+    def collect_bids(self, step: int = None) -> None:
         """
         Request the agents to send their bids and collect them.
         """
@@ -120,7 +121,7 @@ class CoordinatorFiware(Coordinator, Device):
             offers.append(Offer(
                 offering_agent_id = offer_attrs["offeringAgentID"],
                 receiving_agent_id = offer_attrs["receivingAgentID"],
-                prices=offer_attrs["prices"],
+                trading_prices=offer_attrs["prices"],
                 quantities=offer_attrs["quantities"],
                 buying=offer_attrs["buying"],
                 selling=offer_attrs["selling"]
@@ -161,8 +162,8 @@ class CoordinatorFiware(Coordinator, Device):
             offer_attributes = {
                 "offeringAgentID": offer.offering_agent_id,
                 "receivingAgentID": offer.receiving_agent_id,
-                "prices": offer.get_prices(),
-                "quantities": offer.get_quantities(),
+                "prices": offer.get_prices().tolist(),
+                "quantities": offer.get_quantities().tolist(),
                 "buying": offer.buying,
                 "selling": offer.selling,
                 "used": False
@@ -172,7 +173,7 @@ class CoordinatorFiware(Coordinator, Device):
 
 
     @override
-    def publish_trades(self):
+    def publish_trades(self, adjust_bid: bool = True):
         """
         Publish the trades by updating the trades attribute of the Coordinator entity.
         """
